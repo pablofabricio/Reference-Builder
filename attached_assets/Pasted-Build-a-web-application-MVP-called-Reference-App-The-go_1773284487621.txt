@@ -1,0 +1,162 @@
+Build a web application MVP called Reference App.
+The goal of the platform is to help users write and organize notes connected to references, such as:
+* Bible passages
+* Books
+* Sermons
+* Music
+* Poems
+The platform should also allow community learning through channels.
+Users can create notes, organize references hierarchically, and interact inside channels focused on specific references.
+
+Core Features
+1. User Accounts
+Users can create accounts and log in.
+Users can create personal notes and join channels.
+Fields:
+Users
+* id
+* name
+* email
+* password_hash
+* created_at
+
+Notes
+Users create notes associated with reference nodes.
+notes
+* id
+* user_id
+* content
+* reference_node_id
+* visibility (PRIVATE | PUBLIC | CHANNEL)
+* created_at
+Rules:
+PRIVATE → only user PUBLIC → visible globally CHANNEL → visible inside a channel
+
+References
+A reference represents the main work.
+Examples:
+* Bible book
+* Sermon
+* Music
+* Poem
+* Book
+references
+* id
+* type (BIBLE | MUSIC | POEM | BOOK | SERMON)
+* title
+* abbreviation
+* author
+* description
+* created_at
+
+Reference Nodes (Hierarchical Structure)
+References contain hierarchical nodes.
+Example:
+Bible → Book → Chapter → Verse
+Book → Chapter → Paragraph
+Music → Stanza → Line
+references_nodes
+* id
+* type (BOOK | CHAPTER | VERSE | PAGE | SESSION | STANZA | LINE | PARAGRAPH)
+* content
+* label
+* reference_id
+* parent_node_id (nullable)
+* position
+Constraint:
+(reference_id, parent_node_id, position) UNIQUE
+This allows ordering nodes correctly.
+
+Channels
+Channels are thematic spaces where users study references together.
+channels
+* id
+* name
+* created_by
+* description
+* created_at
+
+Channel References
+Channels may focus on specific references.
+channel_references
+* id
+* channel_id
+* reference_id
+
+Channel Members
+Users can join channels.
+channel_members
+* channel_id
+* user_id
+* role (OWNER | MODERATOR | MEMBER | VIEWER)
+* joined_at
+Constraint:
+(channel_id, user_id) UNIQUE
+
+Roles
+OWNER
+* creates the channel
+* deletes the channel
+* manages members
+MODERATOR
+* publishes references in the channel
+* moderates public notes
+* removes members
+MEMBER
+* creates notes inside channel references
+* posts public notes in the channel
+VIEWER
+* read-only access
+
+API Endpoints
+Authentication
+POST /auth/register POST /auth/login GET /me
+Notes
+POST /notes GET /notes GET /notes/{id} PUT /notes
+References
+POST /references PUT /references GET /references GET /references/{id}
+Channels
+POST /channels PUT /channels GET /channels GET /channels/{id}
+
+Suggested Tech Stack
+Backend
+* PHP
+* Laravel
+* PostgreSQL
+Authentication
+* JWT
+
+Monetization
+The platform should be designed to support:
+Premium Plan
+* multiple channels
+* custom tags
+* advanced filters
+* revision history
+* export (PDF / Markdown)
+Creator Plan
+* verified channels
+* curated references
+* analytics
+* pinned references
+Pricing Example
+Free Plan Basic usage
+Premium R$14.90/month
+Church / Creator Plan R$39–79/month
+
+Important Product Principles
+The platform must avoid:
+* Ads in the feed
+* Paid ranking of notes
+* Paywalls on scripture
+* Influencer-driven ranking
+The focus is text, reflection, and learning.
+
+MVP Goal
+Focus first on:
+1. Authentication
+2. Creating references
+3. Creating notes
+4. Basic channels
+5. Viewing notes by reference
+Do not build monetization yet.

@@ -1,0 +1,145 @@
+import { ReactNode, useState } from "react";
+import { Link, useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  BookOpen, 
+  PenTool, 
+  MessageSquare, 
+  Home, 
+  LogOut, 
+  Menu, 
+  X,
+  Compass
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+interface AppLayoutProps {
+  children: ReactNode;
+}
+
+export function AppLayout({ children }: AppLayoutProps) {
+  const [location] = useLocation();
+  const { user, logout } = useAuth();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const navItems = [
+    { href: "/home", label: "Dashboard", icon: Home },
+    { href: "/references", label: "Library", icon: BookOpen },
+    { href: "/notes", label: "My Notes", icon: PenTool },
+    { href: "/channels", label: "Channels", icon: MessageSquare },
+  ];
+
+  const SidebarContent = () => (
+    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border relative z-10">
+      <div className="p-6 flex items-center gap-3">
+        <div className="bg-primary/10 p-2 rounded-xl text-primary">
+          <Compass className="w-6 h-6" />
+        </div>
+        <span className="font-display font-bold text-xl tracking-tight text-sidebar-foreground">
+          Reference
+        </span>
+      </div>
+
+      <nav className="flex-1 px-4 py-4 space-y-1">
+        {navItems.map((item) => {
+          const isActive = location === item.href || location.startsWith(`${item.href}/`);
+          return (
+            <Link 
+              key={item.href} 
+              href={item.href}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={`
+                flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200
+                ${isActive 
+                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                }
+              `}
+            >
+              <item.icon className="w-5 h-5" />
+              <span className="font-medium font-sans">{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="p-4 border-t border-sidebar-border bg-sidebar">
+        <div className="flex items-center gap-3 px-4 py-3 mb-2">
+          <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-secondary-foreground font-display font-bold text-lg border border-border">
+            {user?.name?.charAt(0).toUpperCase() || "U"}
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <p className="text-sm font-semibold truncate text-sidebar-foreground font-sans">{user?.name}</p>
+            <p className="text-xs text-muted-foreground truncate font-sans">{user?.email}</p>
+          </div>
+        </div>
+        <Button 
+          variant="ghost" 
+          className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors rounded-xl"
+          onClick={() => logout()}
+        >
+          <LogOut className="w-4 h-4 mr-2" />
+          <span className="font-sans">Sign Out</span>
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-background flex w-full">
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex w-72 flex-col fixed inset-y-0 left-0 z-50">
+        <SidebarContent />
+      </aside>
+
+      {/* Mobile Header & Nav */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-sidebar border-b border-sidebar-border flex items-center justify-between px-4 z-50">
+        <div className="flex items-center gap-2">
+          <Compass className="w-5 h-5 text-primary" />
+          <span className="font-display font-bold text-lg">Reference</span>
+        </div>
+        <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+          {isMobileMenuOpen ? <X /> : <Menu />}
+        </Button>
+      </div>
+
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, x: -300 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -300 }}
+            className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden"
+          >
+            <div className="w-4/5 max-w-sm h-full pt-16 shadow-2xl">
+              <SidebarContent />
+            </div>
+            <div 
+              className="absolute inset-y-0 right-0 left-[80%] max-w-[calc(100%-24rem)]" 
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-h-screen md:pl-72 pt-16 md:pt-0">
+        <div className="flex-1 w-full bg-texture">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="h-full"
+            >
+              {children}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </main>
+    </div>
+  );
+}

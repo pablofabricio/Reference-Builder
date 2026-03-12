@@ -1,0 +1,16 @@
+packages:
+  "framer-motion": "Smooth page transitions and micro-interactions fitting the contemplative aesthetic"
+  "date-fns": "Human-readable date formatting for notes and channel messages"
+  "react-hook-form": "Form state management"
+  "@hookform/resolvers": "Zod validation resolver for forms"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility for merging tailwind classes safely"
+
+images:
+  - path: "artifacts/reference-app/public/images/hero-library.png"
+    description: "A serene, softly lit ancient library or study room with floating dust motes, warm parchment tones, minimal and ethereal, cinematic lighting"
+    aspect_ratio: "16:9"
+
+notes:
+  - Using a global fetch interceptor in main.tsx to automatically inject the JWT token from localStorage into all /api requests, as the generated api client uses standard fetch.
+  - Assuming UI components exist in src/components/ui/ based on the directory structure.

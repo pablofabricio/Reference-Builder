@@ -1,15 +1,26 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Reference App API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: users
+    description: User operations
+  - name: references
+    description: Reference operations
+  - name: nodes
+    description: Reference node operations
+  - name: notes
+    description: Note operations
+  - name: channels
+    description: Channel operations
 paths:
   /healthz:
     get:
@@ -24,6 +35,698 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterBody"
+      responses:
+        "201":
+          description: User registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /me:
+    get:
+      operationId: getMe
+      tags: [users]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /references:
+    get:
+      operationId: listReferences
+      tags: [references]
+      summary: List all references
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of references
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Reference"
+    post:
+      operationId: createReference
+      tags: [references]
+      summary: Create a reference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReferenceBody"
+      responses:
+        "201":
+          description: Reference created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reference"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /references/{id}:
+    get:
+      operationId: getReference
+      tags: [references]
+      summary: Get a reference by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Reference
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reference"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateReference
+      tags: [references]
+      summary: Update a reference
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReferenceBody"
+      responses:
+        "200":
+          description: Updated reference
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reference"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /references/{referenceId}/nodes:
+    get:
+      operationId: listReferenceNodes
+      tags: [nodes]
+      summary: List nodes for a reference
+      parameters:
+        - name: referenceId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: parentNodeId
+          in: query
+          required: false
+          schema:
+            type: ["integer", "null"]
+      responses:
+        "200":
+          description: List of reference nodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReferenceNode"
+    post:
+      operationId: createReferenceNode
+      tags: [nodes]
+      summary: Create a reference node
+      parameters:
+        - name: referenceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReferenceNodeBody"
+      responses:
+        "201":
+          description: Reference node created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferenceNode"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /notes:
+    get:
+      operationId: listNotes
+      tags: [notes]
+      summary: List notes
+      parameters:
+        - name: referenceNodeId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: visibility
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Note"
+    post:
+      operationId: createNote
+      tags: [notes]
+      summary: Create a note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNoteBody"
+      responses:
+        "201":
+          description: Note created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /notes/{id}:
+    get:
+      operationId: getNote
+      tags: [notes]
+      summary: Get a note by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateNote
+      tags: [notes]
+      summary: Update a note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNoteBody"
+      responses:
+        "200":
+          description: Updated note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteNote
+      tags: [notes]
+      summary: Delete a note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Note deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /channels:
+    get:
+      operationId: listChannels
+      tags: [channels]
+      summary: List channels
+      responses:
+        "200":
+          description: List of channels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Channel"
+    post:
+      operationId: createChannel
+      tags: [channels]
+      summary: Create a channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChannelBody"
+      responses:
+        "201":
+          description: Channel created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /channels/{id}:
+    get:
+      operationId: getChannel
+      tags: [channels]
+      summary: Get a channel by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateChannel
+      tags: [channels]
+      summary: Update a channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateChannelBody"
+      responses:
+        "200":
+          description: Updated channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /channels/{id}/join:
+    post:
+      operationId: joinChannel
+      tags: [channels]
+      summary: Join a channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Joined channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelMember"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Already a member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /channels/{id}/leave:
+    post:
+      operationId: leaveChannel
+      tags: [channels]
+      summary: Leave a channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Left channel
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /channels/{id}/references:
+    get:
+      operationId: listChannelReferences
+      tags: [channels]
+      summary: List references in a channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of references in channel
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Reference"
+    post:
+      operationId: addChannelReference
+      tags: [channels]
+      summary: Add a reference to a channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddChannelReferenceBody"
+      responses:
+        "201":
+          description: Reference added to channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelReference"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /channels/{id}/members:
+    get:
+      operationId: listChannelMembers
+      tags: [channels]
+      summary: List members of a channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChannelMemberDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +737,380 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - createdAt
+
+    RegisterBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+      required:
+        - name
+        - email
+        - password
+
+    LoginBody:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - token
+        - user
+
+    Reference:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [BIBLE, MUSIC, POEM, BOOK, SERMON]
+        title:
+          type: string
+        abbreviation:
+          type: ["string", "null"]
+        author:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - type
+        - title
+        - createdAt
+
+    CreateReferenceBody:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [BIBLE, MUSIC, POEM, BOOK, SERMON]
+        title:
+          type: string
+        abbreviation:
+          type: string
+        author:
+          type: string
+        description:
+          type: string
+      required:
+        - type
+        - title
+
+    UpdateReferenceBody:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [BIBLE, MUSIC, POEM, BOOK, SERMON]
+        title:
+          type: string
+        abbreviation:
+          type: string
+        author:
+          type: string
+        description:
+          type: string
+
+    ReferenceNode:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [BOOK, CHAPTER, VERSE, PAGE, SESSION, STANZA, LINE, PARAGRAPH]
+        content:
+          type: ["string", "null"]
+        label:
+          type: string
+        referenceId:
+          type: integer
+        parentNodeId:
+          type: ["integer", "null"]
+        position:
+          type: integer
+      required:
+        - id
+        - type
+        - label
+        - referenceId
+        - position
+
+    CreateReferenceNodeBody:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [BOOK, CHAPTER, VERSE, PAGE, SESSION, STANZA, LINE, PARAGRAPH]
+        content:
+          type: string
+        label:
+          type: string
+        parentNodeId:
+          type: ["integer", "null"]
+        position:
+          type: integer
+      required:
+        - type
+        - label
+        - position
+
+    Note:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        content:
+          type: string
+        referenceNodeId:
+          type: ["integer", "null"]
+        visibility:
+          type: string
+          enum: [PRIVATE, PUBLIC, CHANNEL]
+        channelId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/User"
+        referenceNode:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: integer
+            label:
+              type: string
+            referenceId:
+              type: integer
+          required:
+            - id
+            - label
+            - referenceId
+      required:
+        - id
+        - userId
+        - content
+        - visibility
+        - createdAt
+        - user
+
+    CreateNoteBody:
+      type: object
+      properties:
+        content:
+          type: string
+        referenceNodeId:
+          type: ["integer", "null"]
+        visibility:
+          type: string
+          enum: [PRIVATE, PUBLIC, CHANNEL]
+        channelId:
+          type: ["integer", "null"]
+      required:
+        - content
+        - visibility
+
+    UpdateNoteBody:
+      type: object
+      properties:
+        content:
+          type: string
+        visibility:
+          type: string
+          enum: [PRIVATE, PUBLIC, CHANNEL]
+        channelId:
+          type: ["integer", "null"]
+
+    Channel:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        createdBy:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        memberCount:
+          type: integer
+        myRole:
+          type: ["string", "null"]
+      required:
+        - id
+        - name
+        - createdBy
+        - createdAt
+        - memberCount
+
+    ChannelDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        createdBy:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        memberCount:
+          type: integer
+        myRole:
+          type: ["string", "null"]
+        references:
+          type: array
+          items:
+            $ref: "#/components/schemas/Reference"
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChannelMemberDetail"
+      required:
+        - id
+        - name
+        - createdBy
+        - createdAt
+        - memberCount
+        - references
+        - members
+
+    CreateChannelBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+      required:
+        - name
+
+    UpdateChannelBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    ChannelMember:
+      type: object
+      properties:
+        channelId:
+          type: integer
+        userId:
+          type: integer
+        role:
+          type: string
+          enum: [OWNER, MODERATOR, MEMBER, VIEWER]
+        joinedAt:
+          type: string
+          format: date-time
+      required:
+        - channelId
+        - userId
+        - role
+        - joinedAt
+
+    ChannelMemberDetail:
+      type: object
+      properties:
+        channelId:
+          type: integer
+        userId:
+          type: integer
+        role:
+          type: string
+          enum: [OWNER, MODERATOR, MEMBER, VIEWER]
+        joinedAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - channelId
+        - userId
+        - role
+        - joinedAt
+        - user
+
+    ChannelReference:
+      type: object
+      properties:
+        id:
+          type: integer
+        channelId:
+          type: integer
+        referenceId:
+          type: integer
+      required:
+        - id
+        - channelId
+        - referenceId
+
+    AddChannelReferenceBody:
+      type: object
+      properties:
+        referenceId:
+          type: integer
+      required:
+        - referenceId
