@@ -17,7 +17,13 @@ export default function NotesList() {
   const queryClient = useQueryClient();
   const deleteMutation = useDeleteNote();
 
-  const myNotes = allNotes?.filter(n => n.userId === user?.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const myNotes = allNotes
+    ?.filter((n: any) => n.userId === user?.id)
+    .sort((a: any, b: any) => {
+      const aDate = a.createdAt || a.created_at;
+      const bDate = b.createdAt || b.created_at;
+      return new Date(bDate).getTime() - new Date(aDate).getTime();
+    });
 
   const handleDelete = (id: number) => {
     if (window.confirm("Are you sure you want to delete this note?")) {
@@ -64,7 +70,7 @@ export default function NotesList() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">
-                        {format(new Date(note.createdAt), 'MMMM d, yyyy')}
+                        {format(new Date((note as any).createdAt || (note as any).created_at), 'MMMM d, yyyy')}
                       </p>
                       <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground bg-secondary px-2 py-1 rounded-md border border-border/50">
                         {note.visibility}

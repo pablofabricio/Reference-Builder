@@ -52,7 +52,10 @@ export default function ChannelDetail() {
     );
   }
 
-  const isMember = !!channel.myRole;
+  const channelReferences = (channel as any).references ?? [];
+  const channelMembers = (channel as any).members ?? [];
+  const memberCount = (channel as any).memberCount ?? channelMembers.length ?? 0;
+  const isMember = Boolean((channel as any).myRole || (channel as any).createdBy || (channel as any).created_by);
 
   return (
     <AppLayout>
@@ -77,11 +80,11 @@ export default function ChannelDetail() {
               <div className="flex items-center gap-6 mt-6">
                 <div className="flex items-center text-sm font-medium bg-secondary px-3 py-1.5 rounded-lg text-secondary-foreground">
                   <Users className="w-4 h-4 mr-2" />
-                  {channel.memberCount} Members
+                  {memberCount} Members
                 </div>
                 <div className="flex items-center text-sm font-medium bg-secondary px-3 py-1.5 rounded-lg text-secondary-foreground">
                   <BookOpen className="w-4 h-4 mr-2" />
-                  {channel.references.length} References
+                  {channelReferences.length} References
                 </div>
               </div>
             </div>
@@ -131,16 +134,20 @@ export default function ChannelDetail() {
             ) : (
               <div className="space-y-6">
                 {channelNotes.map((note) => (
+                  (() => {
+                    const authorName = (note as any).user?.name || `User ${(note as any).userId ?? ''}`.trim();
+                    const createdAt = (note as any).createdAt || (note as any).created_at;
+                    return (
                   <Card key={note.id} className="rounded-2xl border-border/50 shadow-sm bg-card">
                     <CardContent className="p-6">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-display font-bold text-secondary-foreground border border-border">
-                            {note.user.name.charAt(0).toUpperCase()}
+                            {(authorName.charAt(0) || 'U').toUpperCase()}
                           </div>
                           <div>
-                            <p className="text-sm font-bold font-sans text-foreground">{note.user.name}</p>
-                            <p className="text-xs text-muted-foreground font-sans">{format(new Date(note.createdAt), 'MMM d, yyyy h:mm a')}</p>
+                            <p className="text-sm font-bold font-sans text-foreground">{authorName}</p>
+                            <p className="text-xs text-muted-foreground font-sans">{createdAt ? format(new Date(createdAt), 'MMM d, yyyy h:mm a') : ''}</p>
                           </div>
                         </div>
                       </div>
@@ -159,6 +166,8 @@ export default function ChannelDetail() {
                       </p>
                     </CardContent>
                   </Card>
+                    );
+                  })()
                 ))}
               </div>
             )}
@@ -168,11 +177,11 @@ export default function ChannelDetail() {
           <div className="space-y-8">
             <div className="bg-card rounded-2xl border border-border/50 p-6 shadow-sm">
               <h3 className="text-lg font-display font-semibold mb-4 border-b border-border/50 pb-2">Focused Texts</h3>
-              {channel.references.length === 0 ? (
+              {channelReferences.length === 0 ? (
                 <p className="text-sm text-muted-foreground font-serif">No specific texts added yet.</p>
               ) : (
                 <ul className="space-y-3">
-                  {channel.references.map(ref => (
+                  {channelReferences.map((ref: any) => (
                     <li key={ref.id}>
                       <Link href={`/references/${ref.id}`}>
                         <div className="flex items-start gap-3 group cursor-pointer">
@@ -192,20 +201,24 @@ export default function ChannelDetail() {
             <div className="bg-card rounded-2xl border border-border/50 p-6 shadow-sm">
               <h3 className="text-lg font-display font-semibold mb-4 border-b border-border/50 pb-2 flex items-center justify-between">
                 <span>Members</span>
-                <span className="text-sm font-sans font-normal text-muted-foreground bg-secondary px-2 py-0.5 rounded-md">{channel.memberCount}</span>
+                <span className="text-sm font-sans font-normal text-muted-foreground bg-secondary px-2 py-0.5 rounded-md">{memberCount}</span>
               </h3>
               <div className="space-y-4 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
-                {channel.members.map(member => (
-                  <div key={member.userId} className="flex items-center justify-between">
+                {channelMembers.map((member: any) => {
+                  const memberName = member?.user?.name || `User ${member?.userId ?? member?.user_id ?? ''}`.trim();
+                  const memberId = member?.userId ?? member?.user_id;
+                  return (
+                  <div key={memberId ?? member?.id} className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-bold border border-border">
-                        {member.user.name.charAt(0).toUpperCase()}
+                        {(memberName.charAt(0) || 'U').toUpperCase()}
                       </div>
-                      <span className="text-sm font-medium text-foreground">{member.user.name}</span>
+                      <span className="text-sm font-medium text-foreground">{memberName}</span>
                     </div>
                     <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">{member.role}</span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

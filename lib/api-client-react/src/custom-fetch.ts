@@ -239,6 +239,23 @@ function inferResponseType(response: Response): "json" | "text" | "blob" {
   return "blob";
 }
 
+function unwrapApiEnvelope(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return payload;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const hasData = Object.prototype.hasOwnProperty.call(record, "data");
+  const hasMeta = Object.prototype.hasOwnProperty.call(record, "meta");
+  const hasLinks = Object.prototype.hasOwnProperty.call(record, "links");
+
+  if (hasData && (hasMeta || hasLinks)) {
+    return record.data;
+  }
+
+  return payload;
+}
+
 async function parseSuccessBody(
   response: Response,
   responseType: "json" | "text" | "blob" | "auto",
@@ -252,8 +269,10 @@ async function parseSuccessBody(
     responseType === "auto" ? inferResponseType(response) : responseType;
 
   switch (effectiveType) {
-    case "json":
-      return parseJsonBody(response, requestInfo);
+    case "json": {
+      const json = await parseJsonBody(response, requestInfo);
+      return unwrapApiEnvelope(json);
+    }
 
     case "text": {
       const text = await response.text();

@@ -102,6 +102,10 @@ export default function ChannelsList() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {channels?.map(channel => (
+              (() => {
+                const memberCount = (channel as any).memberCount ?? (channel as any).members?.length ?? 0;
+                const isJoined = Boolean((channel as any).myRole || (channel as any).createdBy || (channel as any).created_by);
+                return (
               <Link key={channel.id} href={`/channels/${channel.id}`}>
                 <Card className="h-full rounded-2xl border-border/50 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer bg-card group flex flex-col">
                   <CardHeader className="pb-3">
@@ -120,9 +124,9 @@ export default function ChannelsList() {
                   <CardContent className="mt-auto pt-4 flex items-center justify-between border-t border-border/30">
                     <div className="flex items-center text-sm text-muted-foreground font-medium">
                       <Users className="w-4 h-4 mr-1.5" />
-                      {channel.memberCount} members
+                      {memberCount} members
                     </div>
-                    {channel.myRole ? (
+                    {isJoined ? (
                       <span className="text-xs font-bold uppercase text-primary bg-primary/10 px-2.5 py-1 rounded-md">
                         Joined
                       </span>
@@ -140,6 +144,8 @@ export default function ChannelsList() {
                   </CardContent>
                 </Card>
               </Link>
+                );
+              })()
             ))}
           </div>
         )}

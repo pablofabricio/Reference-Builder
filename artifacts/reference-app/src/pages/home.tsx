@@ -8,6 +8,7 @@ import { Link } from "wouter";
 export default function Home() {
   const { data: publicNotes, isLoading: loadingNotes } = useListNotes({ visibility: 'PUBLIC' });
   const { data: channels, isLoading: loadingChannels } = useListChannels();
+  const myChannels = channels?.filter((c: any) => c.myRole || c.createdBy != null) ?? channels ?? [];
 
   return (
     <AppLayout>
@@ -32,14 +33,18 @@ export default function Home() {
             ) : (
               <div className="space-y-6">
                 {publicNotes?.map((note) => (
+                  (() => {
+                    const authorName = (note as any).user?.name || `User ${(note as any).userId ?? ''}`.trim();
+                    const createdAt = (note as any).createdAt || (note as any).created_at;
+                    return (
                   <Card key={note.id} className="rounded-2xl border-border/50 shadow-sm hover:shadow-md transition-shadow">
                     <CardHeader className="pb-3 flex flex-row items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-display font-bold text-secondary-foreground border border-border">
-                        {note.user.name.charAt(0).toUpperCase()}
+                        {(authorName.charAt(0) || 'U').toUpperCase()}
                       </div>
                       <div>
-                        <CardTitle className="text-base font-sans">{note.user.name}</CardTitle>
-                        <p className="text-xs text-muted-foreground font-sans">{format(new Date(note.createdAt), 'MMM d, yyyy')}</p>
+                        <CardTitle className="text-base font-sans">{authorName}</CardTitle>
+                        <p className="text-xs text-muted-foreground font-sans">{createdAt ? format(new Date(createdAt), 'MMM d, yyyy') : ''}</p>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -56,6 +61,8 @@ export default function Home() {
                       </p>
                     </CardContent>
                   </Card>
+                    );
+                  })()
                 ))}
               </div>
             )}
@@ -67,11 +74,11 @@ export default function Home() {
               <h3 className="text-xl font-display font-semibold mb-4">Your Channels</h3>
               {loadingChannels ? (
                 <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-              ) : channels?.filter(c => c.myRole).length === 0 ? (
+              ) : myChannels.length === 0 ? (
                 <p className="text-sm text-muted-foreground font-serif text-center py-4">You haven't joined any channels yet.</p>
               ) : (
                 <ul className="space-y-3">
-                  {channels?.filter(c => c.myRole).map(channel => (
+                  {myChannels.map((channel: any) => (
                     <li key={channel.id}>
                       <Link href={`/channels/${channel.id}`}>
                         <div className="group flex items-center gap-3 p-3 rounded-xl hover:bg-secondary/50 cursor-pointer transition-colors border border-transparent hover:border-border/50">
@@ -80,7 +87,7 @@ export default function Home() {
                           </div>
                           <div>
                             <p className="font-medium text-sm text-foreground">{channel.name}</p>
-                            <p className="text-xs text-muted-foreground">{channel.memberCount} members</p>
+                            <p className="text-xs text-muted-foreground">{channel.memberCount ?? '-'} members</p>
                           </div>
                         </div>
                       </Link>

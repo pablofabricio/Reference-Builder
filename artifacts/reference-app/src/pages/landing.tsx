@@ -1,30 +1,32 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { Compass, BookOpen, Users, Feather } from "lucide-react";
-import heroImg from "../../public/images/hero-library.png";
+import { Compass, Feather } from "lucide-react";
 
 export default function Landing() {
   return (
-    <div className="min-h-screen bg-background bg-texture flex flex-col font-sans">
-      <header className="px-6 lg:px-12 py-6 flex items-center justify-between relative z-10">
+    <div className="min-h-screen bg-sidebar bg-texture flex flex-col font-sans relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,hsl(var(--sidebar-accent))_0%,transparent_38%),radial-gradient(circle_at_85%_20%,hsl(var(--primary)/0.12)_0%,transparent_32%)] pointer-events-none z-0" />
+      <header className="px-6 lg:px-12 py-6 flex items-center justify-between relative z-30">
         <div className="flex items-center gap-2 text-primary">
           <Compass className="w-8 h-8" />
           <span className="font-display font-bold text-2xl tracking-tight text-foreground">Reference</span>
         </div>
         <div className="flex items-center gap-4">
-          <Link href="/login" className="text-sm font-medium hover:text-primary transition-colors">
-            Sign In
-          </Link>
-          <Link href="/register">
-            <Button className="rounded-full px-6 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-xl transition-all hover:-translate-y-0.5">
+          <Button asChild variant="ghost" className="rounded-full px-5 text-sm font-medium cursor-pointer">
+            <Link href="/login">
+              Sign In
+            </Link>
+          </Button>
+          <Button asChild className="rounded-full px-6 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-xl transition-all hover:-translate-y-0.5 cursor-pointer">
+            <Link href="/register">
               Get Started
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col items-center justify-center px-4 relative z-10 -mt-16">
+      <main className="flex-1 flex flex-col items-center justify-center px-4 relative z-10">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -61,8 +63,8 @@ export default function Landing() {
           transition={{ duration: 1, delay: 0.3, ease: "easeOut" }}
           className="w-full max-w-6xl mx-auto mt-24 px-4"
         >
-          <div className="relative rounded-3xl overflow-hidden shadow-2xl shadow-black/10 border border-border/50 aspect-video md:aspect-[21/9]">
-            <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-transparent to-transparent z-10" />
+          <div className="relative rounded-3xl overflow-hidden shadow-2xl shadow-black/10 border border-sidebar-border/70 aspect-video md:aspect-[21/9]">
+            <div className="absolute inset-0 bg-gradient-to-t from-sidebar/80 via-transparent to-transparent z-10" />
             {/* abstract library representation */}
             <img 
               src={`${import.meta.env.BASE_URL}images/hero-library.png`} 
@@ -73,7 +75,7 @@ export default function Landing() {
         </motion.div>
       </main>
       
-      <footer className="py-12 text-center text-muted-foreground text-sm font-serif z-10 relative">
+      <footer className="py-12 text-center text-muted-foreground text-sm font-serif z-10 relative border-t border-sidebar-border/60 mt-10">
         <p>A place for reflection &copy; {new Date().getFullYear()}</p>
       </footer>
     </div>

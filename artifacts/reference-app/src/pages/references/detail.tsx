@@ -183,15 +183,19 @@ export default function ReferenceDetail() {
                   ) : (
                     <div className="space-y-6">
                       {notes?.map(note => (
+                        (() => {
+                          const authorName = (note as any).user?.name || `User ${(note as any).userId ?? ''}`.trim();
+                          const createdAt = (note as any).createdAt || (note as any).created_at;
+                          return (
                         <div key={note.id} className="bg-card p-6 rounded-2xl border border-border shadow-sm">
                           <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center font-display font-bold text-sm text-secondary-foreground border border-border">
-                                {note.user.name.charAt(0).toUpperCase()}
+                                {(authorName.charAt(0) || 'U').toUpperCase()}
                               </div>
                               <div>
-                                <p className="text-sm font-medium">{note.user.name}</p>
-                                <p className="text-xs text-muted-foreground">{format(new Date(note.createdAt), 'MMM d, yyyy')}</p>
+                                <p className="text-sm font-medium">{authorName}</p>
+                                <p className="text-xs text-muted-foreground">{createdAt ? format(new Date(createdAt), 'MMM d, yyyy') : ''}</p>
                               </div>
                             </div>
                             <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground bg-background px-2 py-1 rounded border border-border">
@@ -202,6 +206,8 @@ export default function ReferenceDetail() {
                             {note.content}
                           </p>
                         </div>
+                          );
+                        })()
                       ))}
                     </div>
                   )}

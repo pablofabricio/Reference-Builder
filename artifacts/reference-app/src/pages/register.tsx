@@ -22,20 +22,12 @@ export default function Register() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    registerMutation.mutate({ data: { name, email, password } }, {
-      onSuccess: (data) => {
-        login(data.token, data.user);
-        toast({ title: "Account created", description: "Welcome to Reference." });
-        setLocation("/home");
-      },
-      onError: (error: any) => {
-        toast({ 
-          title: "Registration failed", 
-          description: error?.response?.data?.error || "Could not create account",
-          variant: "destructive" 
-        });
-      }
+    toast({
+      title: "Registration unavailable",
+      description: "Esta API nao expoe cadastro publico. Use um usuario existente para login.",
+      variant: "destructive"
     });
+    setLocation('/login');
   };
 
   return (

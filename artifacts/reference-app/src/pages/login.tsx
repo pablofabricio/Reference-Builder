@@ -22,8 +22,39 @@ export default function Login() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     loginMutation.mutate({ data: { email, password } }, {
-      onSuccess: (data) => {
-        login(data.token, data.user);
+      onSuccess: async (data: any) => {
+        const token = data?.token || data?.access_token;
+
+        if (!token) {
+          toast({
+            title: "Login failed",
+            description: "Token nao retornado pela API.",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        let user = data?.user;
+        if (!user) {
+          const meResponse = await fetch('/api/auth/me', {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          if (!meResponse.ok) {
+            toast({
+              title: "Login failed",
+              description: "Nao foi possivel carregar o perfil do usuario.",
+              variant: "destructive"
+            });
+            return;
+          }
+
+          user = await meResponse.json();
+        }
+
+        login(token, user);
         toast({ title: "Welcome back", description: "Successfully logged in." });
         setLocation("/home");
       },
