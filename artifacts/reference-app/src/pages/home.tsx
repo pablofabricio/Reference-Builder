@@ -35,6 +35,7 @@ export default function Home() {
                 {publicNotes?.map((note) => (
                   (() => {
                     const authorName = (note as any).user?.name || `User ${(note as any).userId ?? ''}`.trim();
+                    const authorId = Number((note as any).user?.id ?? (note as any).userId ?? (note as any).user_id ?? 0);
                     const createdAt = (note as any).createdAt || (note as any).created_at;
                     return (
                   <Card key={note.id} className="rounded-2xl border-border/50 shadow-sm hover:shadow-md transition-shadow">
@@ -43,7 +44,13 @@ export default function Home() {
                         {(authorName.charAt(0) || 'U').toUpperCase()}
                       </div>
                       <div>
-                        <CardTitle className="text-base font-sans">{authorName}</CardTitle>
+                        {authorId ? (
+                          <Link href={`/channels/user/${authorId}`}>
+                            <CardTitle className="text-base font-sans hover:text-primary transition-colors">{authorName}</CardTitle>
+                          </Link>
+                        ) : (
+                          <CardTitle className="text-base font-sans">{authorName}</CardTitle>
+                        )}
                         <p className="text-xs text-muted-foreground font-sans">{createdAt ? format(new Date(createdAt), 'MMM d, yyyy') : ''}</p>
                       </div>
                     </CardHeader>

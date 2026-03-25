@@ -14,6 +14,7 @@ import ReferenceDetail from "@/pages/references/detail";
 import NoteForm from "@/pages/notes/form";
 import ChannelsList from "@/pages/channels/list";
 import ChannelDetail from "@/pages/channels/detail";
+import RequestsPage from "@/pages/requests";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -27,7 +28,10 @@ const ProtectedRoute = ({ component: Component, ...rest }: any) => {
   }
   
   if (!isAuthenticated) {
-    return <Redirect to="/login" />;
+    const nextPath = typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search}`
+      : "/home";
+    return <Redirect to={`/login?next=${encodeURIComponent(nextPath)}`} />;
   }
   
   return <Component {...rest} />;
@@ -60,7 +64,9 @@ function Router() {
       <Route path="/notes/:id/edit" component={(props) => <ProtectedRoute component={NoteForm} {...props} />} />
       
       <Route path="/channels" component={(props) => <ProtectedRoute component={ChannelsList} {...props} />} />
+      <Route path="/channels/user/:userId" component={(props) => <ProtectedRoute component={ChannelsList} {...props} />} />
       <Route path="/channels/:id" component={(props) => <ProtectedRoute component={ChannelDetail} {...props} />} />
+      <Route path="/requests" component={(props) => <ProtectedRoute component={RequestsPage} {...props} />} />
       
       <Route component={NotFound} />
     </Switch>

@@ -89,19 +89,6 @@ window.fetch = async (...args) => {
       resource = `/api/channel-members?channel_id=${channelMembersMatch[1]}`;
     }
 
-    const joinChannelMatch = resource.match(/^\/api\/channels\/(\d+)\/join$/);
-    if (joinChannelMatch && method === 'POST') {
-      resource = '/api/channel-members';
-      config = {
-        ...config,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(config?.headers || {}),
-        },
-        body: JSON.stringify({ channel_id: Number(joinChannelMatch[1]) }),
-      };
-    }
-
     resource = rewriteQueryParams(resource);
 
     if (typeof config?.body === 'string' && config.body.trim().startsWith('{')) {

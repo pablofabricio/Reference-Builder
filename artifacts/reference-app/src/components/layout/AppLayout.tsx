@@ -1,15 +1,16 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   BookOpen, 
-  MessageSquare, 
   Home, 
   LogOut, 
   Menu, 
   X,
-  Compass
+  Compass,
+  UserCircle2,
+  Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -21,11 +22,57 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPendingRequests = async () => {
+      if (!user?.id) {
+        if (isMounted) setPendingRequestsCount(0);
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/channel-join-requests?status=PENDING");
+        if (!response.ok) return;
+
+        const payload = await response.json();
+        const rows = Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload)
+            ? payload
+            : [];
+
+        if (isMounted) {
+          setPendingRequestsCount(rows.length);
+        }
+      } catch {
+        if (isMounted) {
+          setPendingRequestsCount(0);
+        }
+      }
+    };
+
+    loadPendingRequests();
+
+    const refreshRequests = () => {
+      loadPendingRequests();
+    };
+
+    window.addEventListener("channel-requests-changed", refreshRequests);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("channel-requests-changed", refreshRequests);
+    };
+  }, [location, user?.id]);
 
   const navItems = [
     { href: "/home", label: "Dashboard", icon: Home },
     { href: "/references", label: "Library", icon: BookOpen },
-    { href: "/channels", label: "Channels", icon: MessageSquare },
+    { href: "/requests", label: "Solicitacoes", icon: Users, badge: pendingRequestsCount },
+    { href: "/channels", label: "Profile", icon: UserCircle2 },
   ];
 
   const DesktopSidebarContent = () => (
@@ -59,6 +106,11 @@ export function AppLayout({ children }: AppLayoutProps) {
                 `}
               >
                 <item.icon className="w-5 h-5" />
+                {item.badge ? (
+                  <span className="absolute -top-1 -right-1 min-w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1 shadow-sm">
+                    {item.badge > 99 ? "99+" : item.badge}
+                  </span>
+                ) : null}
               </div>
               <div className="pointer-events-none absolute left-[calc(100%+0.75rem)] top-1/2 -translate-y-1/2 rounded-xl border border-border/60 bg-background/95 px-3 py-2 text-sm font-medium text-foreground shadow-lg opacity-0 translate-x-2 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0">
                 {item.label}
@@ -122,6 +174,11 @@ export function AppLayout({ children }: AppLayoutProps) {
             >
               <item.icon className="w-5 h-5" />
               <span className="font-medium font-sans">{item.label}</span>
+              {item.badge ? (
+                <span className="ml-auto rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
+                  {item.badge > 99 ? "99+" : item.badge}
+                </span>
+              ) : null}
             </Link>
           );
         })}

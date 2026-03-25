@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useGetMe, getGetMeQueryKey, type User } from "@workspace/api-client-react";
+import { getGetMeQueryKey, type User } from "@workspace/api-client-react";
 
 interface AuthContextType {
   user: User | null;
@@ -14,47 +14,81 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(localStorage.getItem("auth_token"));
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(!!token);
   const queryClient = useQueryClient();
 
-  // Only try to fetch user if we have a token
-  const { data: user, isLoading: isQueryLoading } = useGetMe({
-    query: {
-      enabled: !!token,
-      queryKey: getGetMeQueryKey(),
-      retry: false,
-      staleTime: Infinity,
-    }
-  });
-
-  // Handle case where we have a token but fetching user fails (e.g. expired)
   useEffect(() => {
-    if (token && !isQueryLoading && !user) {
-      // Could clear token here, but let's wait for actual 401 error handling in interceptor if we wanted to be robust
-      // For now, if query fails and finishes loading, and we have no user, we might be unauthenticated
-    }
-  }, [token, isQueryLoading, user]);
+    let isMounted = true;
+
+    const loadMe = async () => {
+      if (!token) {
+        if (!isMounted) return;
+        setUser(null);
+        setIsLoading(false);
+        queryClient.setQueryData(getGetMeQueryKey(), null);
+        return;
+      }
+
+      if (isMounted) setIsLoading(true);
+
+      try {
+        const response = await fetch("/api/auth/me", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("Unauthorized");
+        }
+
+        const payload = await response.json();
+        const profile = (payload?.data ?? payload) as User;
+
+        if (!isMounted) return;
+        setUser(profile);
+        queryClient.setQueryData(getGetMeQueryKey(), profile);
+      } catch {
+        if (!isMounted) return;
+        localStorage.removeItem("auth_token");
+        setToken(null);
+        setUser(null);
+        queryClient.setQueryData(getGetMeQueryKey(), null);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    loadMe();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [token, queryClient]);
 
   const login = (newToken: string, newUser: User) => {
     localStorage.setItem("auth_token", newToken);
     setToken(newToken);
+    setUser(newUser);
+    setIsLoading(false);
     queryClient.setQueryData(getGetMeQueryKey(), newUser);
   };
 
   const logout = () => {
     localStorage.removeItem("auth_token");
     setToken(null);
+    setUser(null);
+    setIsLoading(false);
     queryClient.setQueryData(getGetMeQueryKey(), null);
     queryClient.clear();
     window.location.href = "/";
   };
 
-  // We are loading if we have a token but no user data yet
-  const isLoading = !!token && isQueryLoading;
-
   return (
     <AuthContext.Provider
       value={{
-        user: user || null,
+        user,
         isLoading,
         login,
         logout,

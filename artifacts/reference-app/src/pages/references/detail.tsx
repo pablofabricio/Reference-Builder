@@ -190,6 +190,7 @@ export default function ReferenceDetail() {
                       {notes?.map(note => (
                         (() => {
                           const authorName = (note as any).user?.name || `User ${(note as any).userId ?? ''}`.trim();
+                          const authorId = Number((note as any).user?.id ?? (note as any).userId ?? (note as any).user_id ?? 0);
                           const createdAt = (note as any).createdAt || (note as any).created_at;
                           return (
                         <div key={note.id} className="bg-card p-6 rounded-2xl border border-border shadow-sm">
@@ -199,7 +200,13 @@ export default function ReferenceDetail() {
                                 {(authorName.charAt(0) || 'U').toUpperCase()}
                               </div>
                               <div>
-                                <p className="text-sm font-medium">{authorName}</p>
+                                {authorId ? (
+                                  <Link href={`/channels/user/${authorId}`}>
+                                    <p className="text-sm font-medium hover:text-primary transition-colors">{authorName}</p>
+                                  </Link>
+                                ) : (
+                                  <p className="text-sm font-medium">{authorName}</p>
+                                )}
                                 <p className="text-xs text-muted-foreground">{createdAt ? format(new Date(createdAt), 'MMM d, yyyy') : ''}</p>
                               </div>
                             </div>

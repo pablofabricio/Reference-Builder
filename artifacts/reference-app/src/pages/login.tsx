@@ -23,7 +23,7 @@ export default function Login() {
     e.preventDefault();
     loginMutation.mutate({ data: { email, password } }, {
       onSuccess: async (data: any) => {
-        const token = data?.token || data?.access_token;
+        const token = data?.token || data?.access_token || data?.data?.token || data?.data?.access_token;
 
         if (!token) {
           toast({
@@ -34,7 +34,7 @@ export default function Login() {
           return;
         }
 
-        let user = data?.user;
+        let user = data?.user || data?.data?.user;
         if (!user) {
           const meResponse = await fetch('/api/auth/me', {
             headers: {
@@ -51,12 +51,17 @@ export default function Login() {
             return;
           }
 
-          user = await meResponse.json();
+          const mePayload = await meResponse.json();
+          user = mePayload?.data ?? mePayload;
         }
 
         login(token, user);
         toast({ title: "Welcome back", description: "Successfully logged in." });
-        setLocation("/home");
+        const nextPath = typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("next")
+          : null;
+        const safeNextPath = nextPath && nextPath.startsWith("/") ? nextPath : "/home";
+        setLocation(safeNextPath);
       },
       onError: (error: any) => {
         toast({ 

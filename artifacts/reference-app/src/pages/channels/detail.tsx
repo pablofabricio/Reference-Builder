@@ -5,7 +5,8 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Loader2, Book, Music, PenTool, Library, MessageSquare, UserRound, BookOpen, Search, ChevronDown, ChevronRight, FileText, Copy, MessageCircle, Plus, X, Trash2, Edit2, Check } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, Book, Music, PenTool, Library, MessageSquare, UserRound, BookOpen, Search, ChevronDown, ChevronRight, FileText, Copy, MessageCircle, Plus, X, Trash2, Edit2, Check, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -49,6 +50,14 @@ export default function ChannelDetail() {
   const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
   const [nodeEditDraft, setNodeEditDraft] = useState<{ label: string; content: string }>({ label: "", content: "" });
   const [savingNodeEdit, setSavingNodeEdit] = useState(false);
+  const [activeTab, setActiveTab] = useState("references");
+  const [channelMembers, setChannelMembers] = useState<any[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
+  const [updatingMemberId, setUpdatingMemberId] = useState<number | null>(null);
+  const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
+  const [pendingJoinRequestByChannelId, setPendingJoinRequestByChannelId] = useState<Record<number, number>>({});
+  const [isRequestingJoin, setIsRequestingJoin] = useState(false);
+  const [handledRequestLinkFlow, setHandledRequestLinkFlow] = useState(false);
   const [createForm, setCreateForm] = useState({ title: "", type: "BIBLE", author: "", description: "" });
   const [editForm, setEditForm] = useState({ id: 0, title: "", type: "BIBLE", author: "", description: "" });
   const [editChannelForm, setEditChannelForm] = useState({ id: 0, name: "", description: "", visibility: "PRIVATE" });
@@ -82,7 +91,27 @@ export default function ChannelDetail() {
   );
 
   const creatorId = Number((channel as any)?.createdBy ?? (channel as any)?.created_by ?? 0);
-  const creatorName = creatorId === Number(user?.id) ? "Voce" : `Usuario ${creatorId}`;
+  const getUserDisplayName = (userId: number, preferredName?: string | null) => {
+    const normalizedPreferredName = typeof preferredName === "string" ? preferredName.trim() : "";
+    if (normalizedPreferredName) {
+      return normalizedPreferredName;
+    }
+
+    const mappedName = typeof usersById[userId] === "string" ? usersById[userId].trim() : "";
+    if (mappedName) {
+      return mappedName;
+    }
+
+    if (userId === Number(user?.id) && typeof user?.name === "string" && user.name.trim()) {
+      return user.name.trim();
+    }
+
+    return "Perfil";
+  };
+  const creatorName = getUserDisplayName(
+    creatorId,
+    (channel as any)?.creator?.name ?? (channel as any)?.user?.name ?? null,
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -106,7 +135,6 @@ export default function ChannelDetail() {
           }
           return acc;
         }, {});
-
         if (isMounted) {
           setUsersById(mapped);
         }
@@ -126,9 +154,13 @@ export default function ChannelDetail() {
 
   useEffect(() => {
     let isMounted = true;
-    if (!channelId || !user?.id) return;
+    if (!channelId || !user?.id) {
+      if (isMounted) setLoadingMembers(false);
+      return;
+    }
 
     const loadMembership = async () => {
+      setLoadingMembers(true);
       try {
         const response = await fetch(`/api/channel-members?channel_id=${channelId}`);
         if (!response.ok) return;
@@ -147,15 +179,73 @@ export default function ChannelDetail() {
 
         if (isMounted) {
           setMyChannelRole(String(mine?.role || ""));
+          setChannelMembers(rows);
         }
       } catch {
-        if (isMounted) setMyChannelRole(null);
+        if (isMounted) {
+          setMyChannelRole(null);
+          setChannelMembers([]);
+        }
+      } finally {
+        if (isMounted) setLoadingMembers(false);
       }
     };
 
     loadMembership();
     return () => {
       isMounted = false;
+    };
+  }, [channelId, user?.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!user?.id) return;
+
+    const loadPendingRequests = async () => {
+      try {
+        const response = await fetch("/api/channel-join-requests?status=PENDING");
+        if (!response.ok) return;
+
+        const payload = await response.json();
+        const rows = Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload)
+            ? payload
+            : [];
+
+        const mine = rows
+          .filter((row: any) => Number(row.requester_id ?? row.requesterId ?? 0) === Number(user.id))
+          .filter((row: any) => Number(row.id ?? 0) > 0)
+          .reduce((acc: Record<number, number>, row: any) => {
+            const pendingChannelId = Number(row.channel_id ?? row.channelId ?? 0);
+            const requestId = Number(row.id ?? 0);
+            if (!Number.isNaN(pendingChannelId) && pendingChannelId > 0 && !Number.isNaN(requestId) && requestId > 0) {
+              acc[pendingChannelId] = requestId;
+            }
+            return acc;
+          }, {});
+
+        if (isMounted) {
+          setPendingJoinRequestByChannelId(mine);
+        }
+      } catch {
+        if (isMounted) {
+          setPendingJoinRequestByChannelId({});
+        }
+      }
+    };
+
+    loadPendingRequests();
+
+    const refreshRequests = () => {
+      loadPendingRequests();
+    };
+
+    window.addEventListener("channel-requests-changed", refreshRequests);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("channel-requests-changed", refreshRequests);
     };
   }, [channelId, user?.id]);
 
@@ -196,6 +286,212 @@ export default function ChannelDetail() {
   const isOwner = creatorId === Number(user?.id);
   const canChannelActions = isOwner || myChannelRole === "OWNER" || myChannelRole === "MODERATOR";
   const canDeleteChannel = isOwner || myChannelRole === "OWNER";
+  const canManageMemberRoles = isOwner || myChannelRole === "OWNER";
+  const canRemoveMembers = isOwner || myChannelRole === "OWNER" || myChannelRole === "MODERATOR";
+  const channelVisibility = typeof (channel as any)?.visibility === "string"
+    ? String((channel as any).visibility).toUpperCase()
+    : null;
+  const isChannelMember = channelMembers.some((member: any) => {
+    const memberUserId = Number(member.user_id ?? member.userId ?? member.user?.id ?? 0);
+    return memberUserId === Number(user?.id);
+  });
+  const pendingJoinRequestId = pendingJoinRequestByChannelId[channelId];
+  const hasPendingJoinRequest = Number.isFinite(pendingJoinRequestId) && pendingJoinRequestId > 0;
+  const canRequestJoin = channelVisibility === "PUBLIC" && !isOwner && !isChannelMember && !hasPendingJoinRequest;
+  const shouldAutoRequestFromLink = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("request") === "1"
+    : false;
+  const sortedMembers = useMemo(() => {
+    const roleOrder: Record<string, number> = { OWNER: 0, MODERATOR: 1, MEMBER: 2 };
+
+    const uniqueMembers = new Map<number, any>();
+
+    channelMembers.forEach((member: any) => {
+      const memberUserId = Number(member.user_id ?? member.userId ?? member.user?.id ?? 0);
+      if (!memberUserId) return;
+
+      const existing = uniqueMembers.get(memberUserId);
+      const currentRole = String(member.role || "MEMBER").toUpperCase();
+      const existingRole = String(existing?.role || "MEMBER").toUpperCase();
+      const shouldReplace = !existing || (roleOrder[currentRole] ?? 99) < (roleOrder[existingRole] ?? 99);
+
+      if (shouldReplace) {
+        uniqueMembers.set(memberUserId, member);
+      }
+    });
+
+    return Array.from(uniqueMembers.values()).sort((left: any, right: any) => {
+      const leftRole = String(left.role || "MEMBER").toUpperCase();
+      const rightRole = String(right.role || "MEMBER").toUpperCase();
+      const roleDiff = (roleOrder[leftRole] ?? 99) - (roleOrder[rightRole] ?? 99);
+      if (roleDiff !== 0) return roleDiff;
+
+      const leftId = Number(left.user_id ?? left.userId ?? left.user?.id ?? 0);
+      const rightId = Number(right.user_id ?? right.userId ?? right.user?.id ?? 0);
+      const leftName = getUserDisplayName(leftId, left.user?.name).toLowerCase();
+      const rightName = getUserDisplayName(rightId, right.user?.name).toLowerCase();
+
+      return leftName.localeCompare(rightName);
+    });
+  }, [channelMembers, usersById]);
+
+  const handleMemberRoleChange = async (membershipId: number, role: string) => {
+    if (!membershipId || !canManageMemberRoles) return;
+
+    setUpdatingMemberId(membershipId);
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(`/api/channel-members/${membershipId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ role }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody?.message || "Nao foi possivel atualizar permissao");
+      }
+
+      setChannelMembers((prev) =>
+        prev.map((member: any) =>
+          Number(member.id) === membershipId ? { ...member, role } : member,
+        ),
+      );
+      toast({ title: "Permissao atualizada" });
+    } catch (error: any) {
+      toast({ title: error?.message || "Erro ao atualizar permissao", variant: "destructive" });
+    } finally {
+      setUpdatingMemberId(null);
+    }
+  };
+
+  const handleRemoveMember = async (membershipId: number, memberName: string) => {
+    if (!membershipId || !canRemoveMembers) return;
+
+    const confirmed = window.confirm(`Remover ${memberName} deste channel?`);
+    if (!confirmed) return;
+
+    setRemovingMemberId(membershipId);
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(`/api/channel-members/${membershipId}`, {
+        method: "DELETE",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody?.message || "Nao foi possivel remover membro");
+      }
+
+      setChannelMembers((prev) => prev.filter((member: any) => Number(member.id) !== membershipId));
+      toast({ title: "Membro removido" });
+    } catch (error: any) {
+      toast({ title: error?.message || "Erro ao remover membro", variant: "destructive" });
+    } finally {
+      setRemovingMemberId(null);
+    }
+  };
+
+  const handleRequestJoin = async () => {
+    if (!channelId || isRequestingJoin) return;
+
+    setIsRequestingJoin(true);
+    try {
+      if (hasPendingJoinRequest) {
+        const response = await fetch(`/api/channel-join-requests/${pendingJoinRequestId}`, {
+          method: "DELETE",
+        });
+
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => ({}));
+          throw new Error(errorBody?.message || "Nao foi possivel cancelar solicitacao");
+        }
+
+        setPendingJoinRequestByChannelId((prev) => {
+          const next = { ...prev };
+          delete next[channelId];
+          return next;
+        });
+        window.dispatchEvent(new Event("channel-requests-changed"));
+        toast({ title: "Solicitacao cancelada" });
+      } else {
+        const response = await fetch(`/api/channels/${channelId}/join`, {
+          method: "POST",
+        });
+
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => ({}));
+          throw new Error(errorBody?.message || "Nao foi possivel solicitar entrada");
+        }
+
+        const payload = await response.json().catch(() => ({}));
+        const requestId = Number(payload?.data?.id ?? payload?.id ?? 0);
+        if (requestId > 0) {
+          setPendingJoinRequestByChannelId((prev) => ({ ...prev, [channelId]: requestId }));
+        }
+        window.dispatchEvent(new Event("channel-requests-changed"));
+        toast({ title: "Solicitacao enviada" });
+        setLocation("/requests?tab=outgoing");
+      }
+    } catch (error: any) {
+      toast({ title: error?.message || "Erro ao atualizar solicitacao", variant: "destructive" });
+    } finally {
+      setIsRequestingJoin(false);
+    }
+  };
+
+  const handleCopyRequestLink = async () => {
+    if (!channelId || typeof window === "undefined") return;
+
+    const requestLink = `${window.location.origin}/channels/${channelId}?request=1`;
+    try {
+      await navigator.clipboard.writeText(requestLink);
+      toast({ title: "Convite copiado", description: "Compartilhe este convite para solicitarem entrada." });
+    } catch {
+      toast({ title: "Nao foi possivel copiar o link", variant: "destructive" });
+    }
+  };
+
+  useEffect(() => {
+    if (!shouldAutoRequestFromLink || handledRequestLinkFlow) return;
+    if (loadingChannel || loadingMembers || isRequestingJoin) return;
+
+    if (canRequestJoin) {
+      setHandledRequestLinkFlow(true);
+      handleRequestJoin();
+      return;
+    }
+
+    if (hasPendingJoinRequest) {
+      setHandledRequestLinkFlow(true);
+      toast({ title: "Solicitacao ja enviada" });
+      return;
+    }
+
+    if (myChannelRole || isOwner) {
+      setHandledRequestLinkFlow(true);
+      return;
+    }
+
+    setHandledRequestLinkFlow(true);
+    handleRequestJoin();
+  }, [
+    shouldAutoRequestFromLink,
+    handledRequestLinkFlow,
+    loadingChannel,
+    loadingMembers,
+    isRequestingJoin,
+    canRequestJoin,
+    hasPendingJoinRequest,
+    myChannelRole,
+    isOwner,
+  ]);
 
   const handleCreateReference = async () => {
     if (!createForm.title.trim()) return;
@@ -406,12 +702,14 @@ export default function ChannelDetail() {
     }
 
     const authorId = Number(note.userId ?? note.user_id ?? 0);
-    if (authorId && usersById[authorId]) {
-      return usersById[authorId];
+    if (authorId) {
+      return getUserDisplayName(authorId, note.user?.name ?? null);
     }
 
-    return authorId ? `Usuario ${authorId}` : "Autor nao informado";
+    return "Autor nao informado";
   };
+
+  const getNoteAuthorId = (note: any) => Number(note?.user?.id ?? note?.userId ?? note?.user_id ?? 0);
 
   const copyText = async (value: string) => {
     if (!value?.trim()) return;
@@ -759,7 +1057,17 @@ export default function ChannelDetail() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 inline-flex items-center gap-2">
                       <span className="h-1.5 w-1.5 rounded-full bg-primary/70" />
-                      <p className="text-xs text-muted-foreground">{getNoteAuthor(note)}</p>
+                      {getNoteAuthorId(note) ? (
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                          onClick={() => setLocation(`/channels/user/${getNoteAuthorId(note)}`)}
+                        >
+                          {getNoteAuthor(note)}
+                        </button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">{getNoteAuthor(note)}</p>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button
@@ -822,7 +1130,18 @@ export default function ChannelDetail() {
           <h1 className="text-4xl font-display font-bold mb-3">{channel.name}</h1>
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
             <UserRound className="w-4 h-4" />
-            <span>Criador: {creatorName}</span>
+            <span>Criador:</span>
+            {creatorId > 0 ? (
+              <button
+                type="button"
+                className="font-medium text-foreground hover:text-primary transition-colors"
+                onClick={() => setLocation(`/channels/user/${creatorId}`)}
+              >
+                {creatorName}
+              </button>
+            ) : (
+              <span>{creatorName}</span>
+            )}
           </div>
           {channel.description && (
             <p className="text-muted-foreground font-serif">{channel.description}</p>
@@ -870,6 +1189,16 @@ export default function ChannelDetail() {
           )}
           {canChannelActions && (
             <div className="mt-5 flex flex-wrap items-center gap-2">
+              {channelVisibility === "PUBLIC" && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-xl border border-border/60 bg-background px-3 py-2 text-sm text-foreground hover:bg-secondary/60 transition-colors"
+                  onClick={handleCopyRequestLink}
+                >
+                  <Copy className="w-4 h-4" />
+                  Compartilhar convite
+                </button>
+              )}
               <button
                 type="button"
                 className="inline-flex items-center justify-center rounded-xl border border-border/60 bg-background p-2 text-foreground hover:bg-secondary/60 transition-colors"
@@ -886,14 +1215,6 @@ export default function ChannelDetail() {
               >
                 <Edit2 className="w-4 h-4" />
               </button>
-              <button
-                type="button"
-                className="inline-flex items-center justify-center rounded-xl bg-primary p-2 text-primary-foreground hover:bg-primary/90 transition-colors"
-                onClick={() => setShowCreateDialog(true)}
-                aria-label="Nova referencia"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
               {canDeleteChannel && (
                 <button
                   type="button"
@@ -907,16 +1228,60 @@ export default function ChannelDetail() {
               )}
             </div>
           )}
+          {!loadingMembers && !canChannelActions && channelVisibility === "PUBLIC" && !isChannelMember && (
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleRequestJoin}
+                disabled={isRequestingJoin || (!canRequestJoin && !hasPendingJoinRequest)}
+              >
+                {isRequestingJoin ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                {hasPendingJoinRequest ? "Solicitacao enviada" : "Solicitar entrada"}
+              </button>
+            </div>
+          )}
         </div>
 
-        {filteredReferences.length === 0 ? (
-          <div className="text-center py-20 text-muted-foreground font-serif text-lg">
-            Nenhuma referencia vinculada a este canal.
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filteredReferences.map((ref: any) => (
-              (() => {
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="rounded-2xl bg-card border border-border/50 h-auto p-1">
+            <TabsTrigger value="references" className="rounded-xl px-4 py-2.5 gap-2">
+              <BookOpen className="w-4 h-4" />
+              Referencias
+              <span className="rounded-full bg-background/80 px-2 py-0.5 text-xs text-muted-foreground border border-border/50">
+                {references.length}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="members" className="rounded-xl px-4 py-2.5 gap-2">
+              <Users className="w-4 h-4" />
+              Membros
+              <span className="rounded-full bg-background/80 px-2 py-0.5 text-xs text-muted-foreground border border-border/50">
+                {sortedMembers.length}
+              </span>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="references" className="space-y-4 mt-0">
+            {canChannelActions && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  onClick={() => setShowCreateDialog(true)}
+                >
+                  <Plus className="w-4 h-4" />
+                  Criar referencia
+                </button>
+              </div>
+            )}
+            {filteredReferences.length === 0 ? (
+              <div className="text-center py-20 text-muted-foreground font-serif text-lg">
+                Nenhuma referencia vinculada a este canal.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredReferences.map((ref: any) => (
+                  (() => {
                 const isOpen = expandedRefs.includes(ref.id);
                 const nodes = referenceNodesById[ref.id] ?? [];
                 const nodeIds = new Set(nodes.map((node: any) => Number(node.id)).filter((value: number) => !Number.isNaN(value)));
@@ -930,7 +1295,7 @@ export default function ChannelDetail() {
                   return Date.now() - new Date(ts).getTime() < SEVEN_DAYS_MS;
                 });
                 const referenceCreatorId = Number(ref.createdBy ?? ref.created_by ?? creatorId);
-                const referenceCreatorName = referenceCreatorId === Number(user?.id) ? "Voce" : `Usuario ${referenceCreatorId}`;
+                const referenceCreatorName = getUserDisplayName(referenceCreatorId, ref.user?.name ?? null);
                 const canEditReference = canChannelActions;
                 const isReferenceEditing = editingReferenceId === Number(ref.id);
 
@@ -955,7 +1320,20 @@ export default function ChannelDetail() {
                             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                               <span className="inline-flex items-center gap-1">
                                 <UserRound className="w-3.5 h-3.5" />
-                                {referenceCreatorName}
+                                {referenceCreatorId > 0 ? (
+                                  <button
+                                    type="button"
+                                    className="hover:text-primary transition-colors"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setLocation(`/channels/user/${referenceCreatorId}`);
+                                    }}
+                                  >
+                                    {referenceCreatorName}
+                                  </button>
+                                ) : (
+                                  <span>{referenceCreatorName}</span>
+                                )}
                               </span>
                               <span>{ref.author || "Autor nao informado"}</span>
                             </div>
@@ -1081,7 +1459,17 @@ export default function ChannelDetail() {
                                       <div className="flex items-start justify-between gap-2">
                                         <div className="min-w-0 inline-flex items-center gap-2">
                                           <span className="h-1.5 w-1.5 rounded-full bg-primary/70" />
-                                          <p className="text-xs text-muted-foreground">{getNoteAuthor(note)}</p>
+                                          {getNoteAuthorId(note) ? (
+                                            <button
+                                              type="button"
+                                              className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                                              onClick={() => setLocation(`/channels/user/${getNoteAuthorId(note)}`)}
+                                            >
+                                              {getNoteAuthor(note)}
+                                            </button>
+                                          ) : (
+                                            <p className="text-xs text-muted-foreground">{getNoteAuthor(note)}</p>
+                                          )}
                                         </div>
                                         <div className="flex items-center gap-1.5">
                                           <button
@@ -1128,10 +1516,112 @@ export default function ChannelDetail() {
                     )}
                   </Card>
                 );
-              })()
-            ))}
-          </div>
-        )}
+                  })()
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="members" className="mt-0">
+            {canManageMemberRoles && (
+              <div className="mb-4 flex justify-end">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  onClick={() => setLocation("/requests")}
+                >
+                  <Users className="w-4 h-4" />
+                  Ver solicitacoes
+                </button>
+              </div>
+            )}
+            {loadingMembers ? (
+              <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+            ) : sortedMembers.length === 0 ? (
+              <div className="text-center py-20 text-muted-foreground font-serif text-lg">
+                Nenhum membro encontrado neste channel.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {sortedMembers.map((member: any) => {
+                  const memberUserId = Number(member.user_id ?? member.userId ?? member.user?.id ?? 0);
+                  const memberName = getUserDisplayName(memberUserId, member.user?.name ?? null);
+                  const memberRole = String(member.role || "MEMBER").toUpperCase();
+                  const isCurrentUser = memberUserId === Number(user?.id);
+                  const isChannelOwnerMember = memberUserId === creatorId;
+                  const memberRecordId = Number(member.id ?? 0);
+                  const canRemoveThisMember = canRemoveMembers && !isChannelOwnerMember && !isCurrentUser && memberRecordId > 0;
+
+                  return (
+                    <Card key={member.id ?? `${memberUserId}-${memberRole}`} className="rounded-2xl border-border/50 shadow-sm">
+                      <CardContent className="p-5 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <button
+                            type="button"
+                            className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-display font-bold text-base shrink-0"
+                            onClick={() => setLocation(`/channels/user/${memberUserId}`)}
+                            disabled={!memberUserId}
+                          >
+                            {(memberName.charAt(0) || "U").toUpperCase()}
+                          </button>
+                          <div className="min-w-0">
+                            <button
+                              type="button"
+                              className="text-left font-medium text-foreground hover:text-primary transition-colors truncate"
+                              onClick={() => setLocation(`/channels/user/${memberUserId}`)}
+                              disabled={!memberUserId}
+                            >
+                              {memberName}{isCurrentUser ? " (voce)" : ""}
+                            </button>
+                          </div>
+                        </div>
+                        {canManageMemberRoles && !isChannelOwnerMember ? (
+                          <div className="flex items-center gap-2 shrink-0">
+                            {(updatingMemberId === memberRecordId || removingMemberId === memberRecordId) && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+                            <select
+                              className="h-9 rounded-lg bg-background border border-border px-3 text-xs font-bold uppercase tracking-wider text-foreground"
+                              value={memberRole}
+                              onChange={(e) => handleMemberRoleChange(memberRecordId, e.target.value)}
+                              disabled={!memberRecordId || updatingMemberId === memberRecordId || removingMemberId === memberRecordId}
+                            >
+                              <option value="MODERATOR">MODERATOR</option>
+                              <option value="MEMBER">MEMBER</option>
+                            </select>
+                            {canRemoveThisMember && (
+                              <button
+                                type="button"
+                                className="inline-flex items-center justify-center rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-600 hover:bg-rose-100 transition-colors disabled:opacity-50"
+                                onClick={() => handleRemoveMember(memberRecordId, memberName)}
+                                disabled={removingMemberId === memberRecordId || updatingMemberId === memberRecordId}
+                                aria-label="Remover membro"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        ) : canRemoveThisMember ? (
+                          <button
+                            type="button"
+                            className="inline-flex items-center justify-center rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-600 hover:bg-rose-100 transition-colors disabled:opacity-50 shrink-0"
+                            onClick={() => handleRemoveMember(memberRecordId, memberName)}
+                            disabled={removingMemberId === memberRecordId}
+                            aria-label="Remover membro"
+                          >
+                            {removingMemberId === memberRecordId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                          </button>
+                        ) : (
+                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground bg-background px-2.5 py-1 rounded-md border border-border/50 shrink-0">
+                            {memberRole}
+                          </span>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
