@@ -519,7 +519,7 @@ export default function ChannelDetail() {
       toast({ title: "Referencia criada", description: createForm.title });
       setShowCreateDialog(false);
       setCreateForm({ title: "", type: "BIBLE", author: "", description: "" });
-      window.location.reload();
+      setLocation(`/references/${refId}`);
     } catch (e: any) {
       toast({ title: e.message || "Erro ao criar", variant: "destructive" });
     } finally {
@@ -1282,41 +1282,28 @@ export default function ChannelDetail() {
               <div className="space-y-4">
                 {filteredReferences.map((ref: any) => (
                   (() => {
-                const isOpen = expandedRefs.includes(ref.id);
-                const nodes = referenceNodesById[ref.id] ?? [];
-                const nodeIds = new Set(nodes.map((node: any) => Number(node.id)).filter((value: number) => !Number.isNaN(value)));
-                const notesForReference = mergedNotes.filter((note: any) => nodeIds.has(Number(note.referenceNodeId ?? note.reference_node_id)));
-                const hasNotes = notesForReference.length > 0;
-                const hasExpandable = hasNotes || nodes.length > 0;
-                const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-                const isRecentlyAnnotated = notesForReference.some((note: any) => {
-                  const ts = note.createdAt ?? note.created_at;
-                  if (!ts) return false;
-                  return Date.now() - new Date(ts).getTime() < SEVEN_DAYS_MS;
-                });
                 const referenceCreatorId = Number(ref.createdBy ?? ref.created_by ?? creatorId);
                 const referenceCreatorName = getUserDisplayName(referenceCreatorId, ref.user?.name ?? null);
                 const canEditReference = canChannelActions;
-                const isReferenceEditing = editingReferenceId === Number(ref.id);
 
                 return (
                   <Card
                     key={ref.id}
-                    className={`rounded-2xl border-border/50 shadow-sm bg-card overflow-hidden ${hasExpandable ? "cursor-pointer" : "cursor-default"}`}
-                    onClick={() => { if (hasExpandable) toggleReference(ref.id); }}
+                      className="rounded-2xl border-border/50 shadow-sm bg-card overflow-hidden cursor-pointer"
+                      onClick={() => setLocation(`/references/${Number(ref.id)}?view=reading`)}
                   >
                     <div className="h-1.5 w-full bg-gradient-to-r from-primary/40 to-accent/40" />
-                    <CardHeader className="pb-4">
+                      <CardHeader className="pb-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex items-start gap-3 min-w-0">
                           <div className="p-2.5 rounded-xl bg-secondary text-secondary-foreground shrink-0">
                             {typeIcons[ref.type] || <BookOpen className="w-5 h-5" />}
                           </div>
                           <div className="min-w-0">
-                            <CardTitle className={`font-display text-xl leading-tight transition-colors line-clamp-3${isOpen ? " text-primary" : ""}`}>
+                            <CardTitle className="font-display text-xl leading-tight transition-colors line-clamp-3">
                               {ref.description || ref.title}
                             </CardTitle>
-                            <p className={`mt-1 text-sm font-serif transition-colors${isOpen ? " text-foreground font-medium" : " text-muted-foreground"}`}>{ref.title}</p>
+                            <p className="mt-1 text-sm font-serif text-muted-foreground transition-colors">{ref.title}</p>
                             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                               <span className="inline-flex items-center gap-1">
                                 <UserRound className="w-3.5 h-3.5" />
@@ -1340,12 +1327,6 @@ export default function ChannelDetail() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          {isRecentlyAnnotated && (
-                            <span className="relative inline-flex shrink-0" title="Notas adicionadas recentemente">
-                              <MessageCircle className="w-4 h-4 text-rose-500" />
-                              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500" />
-                            </span>
-                          )}
                           <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground bg-background px-2 py-1 rounded-md border border-border/50">
                             {ref.type}
                           </span>
@@ -1363,154 +1344,66 @@ export default function ChannelDetail() {
                                   description: String(ref.description || ""),
                                 });
                                 setEditingReferenceId((prev) => (prev === Number(ref.id) ? null : Number(ref.id)));
-                                if (!expandedRefs.includes(ref.id)) {
-                                  toggleReference(ref.id);
-                                }
                               }}
                               aria-label="Editar referencia"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                           )}
-                          {hasExpandable && (
-                            <button
-                              type="button"
-                              className="inline-flex items-center justify-center rounded-full border border-border/60 p-2 text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleReference(ref.id);
-                              }}
-                              aria-label={isOpen ? "Fechar referencia" : "Abrir referencia"}
-                            >
-                              {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                            </button>
-                          )}
+                          <ChevronRight className="w-4 h-4 text-muted-foreground" />
                         </div>
                       </div>
                     </CardHeader>
-
-                    {isOpen && (
+                    {editingReferenceId === Number(ref.id) && canEditReference && (
                       <CardContent className="pt-0 pb-6" onClick={(e) => e.stopPropagation()}>
-                        <div className="border-t border-border/50 pt-6 space-y-4">
-                          {isReferenceEditing && canEditReference && (
-                            <div className="rounded-xl border border-border/60 bg-background/70 p-3 space-y-3">
-                              <Input
-                                value={editForm.title}
-                                onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
-                                placeholder="Titulo"
-                              />
-                              <select
-                                className="w-full h-10 rounded-xl bg-background border border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                                value={editForm.type}
-                                onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value }))}
+                        <div className="border-t border-border/50 pt-6">
+                          <div className="rounded-xl border border-border/60 bg-background/70 p-3 space-y-3">
+                            <Input
+                              value={editForm.title}
+                              onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+                              placeholder="Titulo"
+                            />
+                            <select
+                              className="w-full h-10 rounded-xl bg-background border border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                              value={editForm.type}
+                              onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value }))}
+                            >
+                              <option value="BIBLE">Bible</option>
+                              <option value="BOOK">Book</option>
+                              <option value="POEM">Poem</option>
+                              <option value="MUSIC">Music</option>
+                              <option value="SERMON">Sermon</option>
+                            </select>
+                            <Input
+                              value={editForm.author}
+                              onChange={(e) => setEditForm((f) => ({ ...f, author: e.target.value }))}
+                              placeholder="Autor"
+                            />
+                            <Input
+                              value={editForm.description}
+                              onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                              placeholder="Descricao"
+                            />
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                className="inline-flex items-center justify-center rounded-lg border border-border/60 p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                                onClick={() => setEditingReferenceId(null)}
+                                aria-label="Cancelar edicao da referencia"
                               >
-                                <option value="BIBLE">Bible</option>
-                                <option value="BOOK">Book</option>
-                                <option value="POEM">Poem</option>
-                                <option value="MUSIC">Music</option>
-                                <option value="SERMON">Sermon</option>
-                              </select>
-                              <Input
-                                value={editForm.author}
-                                onChange={(e) => setEditForm((f) => ({ ...f, author: e.target.value }))}
-                                placeholder="Autor"
-                              />
-                              <Input
-                                value={editForm.description}
-                                onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
-                                placeholder="Descricao"
-                              />
-                              <div className="flex items-center justify-end gap-2">
-                                <button
-                                  type="button"
-                                  className="inline-flex items-center justify-center rounded-lg border border-border/60 p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
-                                  onClick={() => setEditingReferenceId(null)}
-                                  aria-label="Cancelar edicao da referencia"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  className="inline-flex items-center justify-center rounded-lg bg-primary p-1.5 text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-                                  onClick={handleEditReference}
-                                  disabled={isEditingReference || !editForm.title.trim()}
-                                  aria-label="Salvar referencia"
-                                >
-                                  {isEditingReference ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                                </button>
-                              </div>
+                                <X className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex items-center justify-center rounded-lg bg-primary p-1.5 text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                onClick={handleEditReference}
+                                disabled={isEditingReference || !editForm.title.trim()}
+                                aria-label="Salvar referencia"
+                              >
+                                {isEditingReference ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                              </button>
                             </div>
-                          )}
-
-                          {loadingNodesById[ref.id] ? (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              Carregando estrutura...
-                            </div>
-                          ) : nodes.length === 0 ? (
-                            <div className="space-y-2">
-                              <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2">
-                                <p className="text-sm font-medium text-foreground">{ref.description || ref.title}</p>
-                              </div>
-                              {notesForReference.length > 0 && (
-                                <div className="pl-3 border-l border-border/60 space-y-2">
-                                  {notesForReference.map((note: any) => (
-                                    <div key={note.id} className="rounded-2xl border border-border/50 bg-background/80 backdrop-blur px-3.5 py-3 shadow-sm">
-                                      <div className="flex items-start justify-between gap-2">
-                                        <div className="min-w-0 inline-flex items-center gap-2">
-                                          <span className="h-1.5 w-1.5 rounded-full bg-primary/70" />
-                                          {getNoteAuthorId(note) ? (
-                                            <button
-                                              type="button"
-                                              className="text-xs text-muted-foreground hover:text-primary transition-colors"
-                                              onClick={() => setLocation(`/channels/user/${getNoteAuthorId(note)}`)}
-                                            >
-                                              {getNoteAuthor(note)}
-                                            </button>
-                                          ) : (
-                                            <p className="text-xs text-muted-foreground">{getNoteAuthor(note)}</p>
-                                          )}
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                          <button
-                                            type="button"
-                                            className="inline-flex items-center justify-center rounded-md border border-border/50 p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
-                                            onClick={() => copyText(String(note.content || ""))}
-                                            aria-label="Copiar note"
-                                          >
-                                            <Copy className="w-3.5 h-3.5" />
-                                          </button>
-                                          {canDeleteNote(note) && (
-                                            <button
-                                              type="button"
-                                              className="inline-flex items-center justify-center rounded-md border border-border/50 p-1.5 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 transition-colors disabled:opacity-50"
-                                              onClick={() => deleteNote(Number(note.id))}
-                                              aria-label="Excluir note"
-                                              disabled={deletingNoteById[Number(note.id)]}
-                                            >
-                                              {deletingNoteById[Number(note.id)] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <p className="text-sm leading-6 text-foreground/85 whitespace-pre-wrap mt-2.5">{note.content}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              {renderNodeTree(nodes, Number(ref.id))}
-                            </div>
-                          )}
-
-                          {!loadingNotes && notesForReference.length === 0 && (
-                            <p className="text-sm text-muted-foreground font-serif inline-flex items-center gap-2">
-                              <FileText className="w-4 h-4" />
-                              Nenhuma note adicionada para esta referencia.
-                            </p>
-                          )}
+                          </div>
                         </div>
                       </CardContent>
                     )}
