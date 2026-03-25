@@ -1,286 +1,428 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
-import { getListNotesQueryKey, useDeleteNote, useListChannels, useListNotes, useListReferences } from "@workspace/api-client-react";
+import { useLocation, useSearch } from "wouter";
+import { useListChannels, useListReferences, type ReferenceNode } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { useAuth } from "@/lib/auth";
-import { useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
-import { Loader2, Search, PenTool, MessageSquare, Plus, Trash2, Edit2, BookOpen } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { AlignLeft, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import ReferenceDetail from "@/pages/references/detail";
+
+const getNodeParentId = (node: ReferenceNode | any) => node.parentNodeId ?? node.parent_node_id ?? null;
+const getNodePosition = (node: ReferenceNode | any) => Number(node.position ?? 0);
+
+const getReferenceVisibleRootNodes = (referenceTitle: string | null | undefined, nodes: ReferenceNode[]) => {
+  const rootNodes = nodes
+    .filter((node) => getNodeParentId(node) == null)
+    .sort((a, b) => getNodePosition(a) - getNodePosition(b));
+
+  if (rootNodes.length !== 1) return rootNodes;
+
+  const singleRoot = rootNodes[0] as any;
+  const normalizedReferenceTitle = String(referenceTitle || "").trim().toLowerCase();
+  const normalizedRootLabel = String(singleRoot?.label || "").trim().toLowerCase();
+
+  if (!normalizedReferenceTitle || normalizedReferenceTitle !== normalizedRootLabel) {
+    return rootNodes;
+  }
+
+  return nodes
+    .filter((node) => Number(getNodeParentId(node)) === Number(singleRoot.id))
+    .sort((a, b) => getNodePosition(a) - getNodePosition(b));
+};
+
+const flattenNodesForReading = (nodes: ReferenceNode[], rootNodes: ReferenceNode[], level = 0): Array<{ node: ReferenceNode; level: number }> => {
+  const output: Array<{ node: ReferenceNode; level: number }> = [];
+
+  rootNodes.forEach((node) => {
+    output.push({ node, level });
+    const children = nodes
+      .filter((candidate) => Number(getNodeParentId(candidate)) === Number(node.id))
+      .sort((a, b) => getNodePosition(a) - getNodePosition(b));
+
+    if (children.length > 0) {
+      output.push(...flattenNodesForReading(nodes, children, level + 1));
+    }
+  });
+
+  return output;
+};
+
+const getReferenceSortOrder = (reference: any) => {
+  const title = String(reference?.title || "");
+  const weekMatch = title.match(/Semana\s*(\d+)/i);
+  if (weekMatch) return Number(weekMatch[1]);
+  return 999;
+};
 
 export default function ReferencesList() {
-  const [search, setSearch] = useState("");
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const [referenceIdByNodeId, setReferenceIdByNodeId] = useState<Record<number, number>>({});
-  const [channelIdByReferenceId, setChannelIdByReferenceId] = useState<Record<number, number>>({});
+  const [, setLocation] = useLocation();
+  const search = useSearch();
+  const { data: references, isLoading: loadingReferences } = useListReferences();
+  const { data: channels, isLoading: loadingChannels } = useListChannels();
+  const [allNodes, setAllNodes] = useState<ReferenceNode[]>([]);
+  const [loadingAllNodes, setLoadingAllNodes] = useState(true);
+  const [channelReferenceLinks, setChannelReferenceLinks] = useState<any[]>([]);
+  const [loadingChannelReferenceLinks, setLoadingChannelReferenceLinks] = useState(true);
+  const [expandedChannelIds, setExpandedChannelIds] = useState<number[]>([]);
+  const [expandedReferenceIds, setExpandedReferenceIds] = useState<number[]>([]);
 
-  const { data: references } = useListReferences();
-  const { data: channels } = useListChannels();
-  const { data: allNotes, isLoading: loadingNotes } = useListNotes();
-  const deleteNoteMutation = useDeleteNote();
-
-  const referencesById = useMemo(() => {
-    const map = new Map<number, any>();
-    (references ?? []).forEach((ref: any) => {
-      const id = Number(ref.id);
-      if (!Number.isNaN(id)) map.set(id, ref);
-    });
-    return map;
-  }, [references]);
-
-  const channelsById = useMemo(() => {
-    const map = new Map<number, any>();
-    (channels ?? []).forEach((channel: any) => {
-      const id = Number(channel.id);
-      if (!Number.isNaN(id)) map.set(id, channel);
-    });
-    return map;
-  }, [channels]);
+  const selectedReferenceId = useMemo(() => {
+    const raw = new URLSearchParams(search).get("ref");
+    const parsed = Number(raw ?? 0);
+    return parsed > 0 ? parsed : null;
+  }, [search]);
 
   useEffect(() => {
     let isMounted = true;
 
-    const loadMappings = async () => {
+    const loadData = async () => {
+      setLoadingChannelReferenceLinks(true);
+      setLoadingAllNodes(true);
       try {
         const token = localStorage.getItem("auth_token");
         const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-
-        const [nodesResponse, channelRefsResponse] = await Promise.all([
-          fetch("/api/reference-nodes", { headers }),
+        const [channelRefsResponse, nodesResponse] = await Promise.all([
           fetch("/api/channel-references", { headers }),
+          fetch("/api/reference-nodes", { headers }),
         ]);
 
-        const nodesPayload = await nodesResponse.json().catch(() => ({}));
-        const channelRefsPayload = await channelRefsResponse.json().catch(() => ({}));
+        if (!channelRefsResponse.ok) throw new Error("Failed to load channel references");
+        if (!nodesResponse.ok) throw new Error("Failed to load nodes");
 
-        const nodes = Array.isArray(nodesPayload?.data)
-          ? nodesPayload.data
-          : Array.isArray(nodesPayload)
-            ? nodesPayload
-            : [];
+        const channelRefsPayload = await channelRefsResponse.json();
+        const nodesPayload = await nodesResponse.json();
 
-        const channelRefs = Array.isArray(channelRefsPayload?.data)
+        const channelRows = Array.isArray(channelRefsPayload?.data)
           ? channelRefsPayload.data
           : Array.isArray(channelRefsPayload)
             ? channelRefsPayload
             : [];
 
-        if (!isMounted) return;
+        const nodeRows = Array.isArray(nodesPayload?.data)
+          ? nodesPayload.data
+          : Array.isArray(nodesPayload)
+            ? nodesPayload
+            : [];
 
-        const nodeMap: Record<number, number> = {};
-        nodes.forEach((row: any) => {
-          const nodeId = Number(row.id);
-          const referenceId = Number(row.reference_id ?? row.referenceId);
-          if (!Number.isNaN(nodeId) && !Number.isNaN(referenceId) && referenceId > 0) {
-            nodeMap[nodeId] = referenceId;
-          }
-        });
-
-        const referenceMap: Record<number, number> = {};
-        channelRefs.forEach((row: any) => {
-          const referenceId = Number(row.reference_id ?? row.referenceId);
-          const channelId = Number(row.channel_id ?? row.channelId);
-          if (!Number.isNaN(referenceId) && !Number.isNaN(channelId) && referenceId > 0 && channelId > 0 && !referenceMap[referenceId]) {
-            referenceMap[referenceId] = channelId;
-          }
-        });
-
-        setReferenceIdByNodeId(nodeMap);
-        setChannelIdByReferenceId(referenceMap);
+        if (isMounted) {
+          setChannelReferenceLinks(channelRows);
+          setAllNodes(nodeRows as ReferenceNode[]);
+        }
       } catch {
-        if (!isMounted) return;
-        setReferenceIdByNodeId({});
-        setChannelIdByReferenceId({});
+        if (isMounted) {
+          setChannelReferenceLinks([]);
+          setAllNodes([]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingChannelReferenceLinks(false);
+          setLoadingAllNodes(false);
+        }
       }
     };
 
-    loadMappings();
+    loadData();
 
     return () => {
       isMounted = false;
     };
   }, []);
 
-  const myRecentNotes = useMemo(() => {
-    const term = search.trim().toLowerCase();
+  const nodesByReferenceId = useMemo(() => {
+    const grouped = new Map<number, ReferenceNode[]>();
 
-    const base = (allNotes ?? [])
-      .filter((note: any) => {
-        const isMine = Number(note.userId ?? note.user_id ?? 0) === Number(user?.id);
-        const referenceNodeId = Number(note.referenceNodeId ?? note.reference_node_id ?? note.referenceNode?.id ?? note.reference_node?.id ?? 0);
-        const nestedReferenceId = Number(note.referenceNode?.referenceId ?? note.reference_node?.reference_id ?? 0);
-        const referenceId = nestedReferenceId > 0 ? nestedReferenceId : Number(referenceIdByNodeId[referenceNodeId] ?? 0);
-        const directChannelId = Number(note.channelId ?? note.channel_id ?? 0);
-        const channelId = directChannelId > 0 ? directChannelId : Number(channelIdByReferenceId[referenceId] ?? 0);
-        return (
-          isMine &&
-          referenceNodeId > 0 &&
-          referenceId > 0 &&
-          channelId > 0
-        );
-      })
+    allNodes.forEach((node: any) => {
+      const referenceId = Number(node.referenceId ?? node.reference_id ?? 0);
+      if (!referenceId) return;
+
+      const current = grouped.get(referenceId) ?? [];
+      current.push(node);
+      grouped.set(referenceId, current);
+    });
+
+    return grouped;
+  }, [allNodes]);
+
+  const referencesById = useMemo(() => {
+    const map = new Map<number, any>();
+    (references ?? []).forEach((reference: any) => {
+      const id = Number(reference?.id ?? 0);
+      if (id > 0) map.set(id, reference);
+    });
+    return map;
+  }, [references]);
+
+  const channelRows = useMemo(() => {
+    const rows = (channels ?? []).map((channel: any) => {
+      const channelId = Number(channel?.id ?? 0);
+      const referenceIds = (channelReferenceLinks ?? [])
+        .filter((link: any) => Number(link?.channel_id ?? link?.channelId ?? 0) === channelId)
+        .map((link: any) => Number(link?.reference_id ?? link?.referenceId ?? 0))
+        .filter((value: number) => value > 0);
+
+      const mappedReferences = referenceIds
+        .map((referenceId: number) => referencesById.get(referenceId))
+        .filter(Boolean)
+        .sort((a: any, b: any) => {
+          const orderDiff = getReferenceSortOrder(a) - getReferenceSortOrder(b);
+          if (orderDiff !== 0) return orderDiff;
+          return String(a?.title || "").localeCompare(String(b?.title || ""));
+        });
+
+      return {
+        id: channelId,
+        name: String(channel?.name || `Canal ${channelId}`),
+        references: mappedReferences,
+      };
+    });
+
+    return rows.sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }, [channels, channelReferenceLinks, referencesById]);
+
+  const referencesWithoutChannel = useMemo(() => {
+    const linkedIds = new Set(
+      (channelReferenceLinks ?? [])
+        .map((link: any) => Number(link?.reference_id ?? link?.referenceId ?? 0))
+        .filter((value: number) => value > 0),
+    );
+
+    return (references ?? [])
+      .filter((reference: any) => !linkedIds.has(Number(reference?.id ?? 0)))
       .sort((a: any, b: any) => {
-        const aDate = a.createdAt || a.created_at;
-        const bDate = b.createdAt || b.created_at;
-        return new Date(bDate).getTime() - new Date(aDate).getTime();
+        const orderDiff = getReferenceSortOrder(a) - getReferenceSortOrder(b);
+        if (orderDiff !== 0) return orderDiff;
+        return String(a?.title || "").localeCompare(String(b?.title || ""));
       });
+  }, [references, channelReferenceLinks]);
 
-    if (!term) return base;
+  const selectedReference = useMemo(
+    () => (references ?? []).find((reference: any) => Number(reference?.id ?? 0) === Number(selectedReferenceId ?? 0)) ?? null,
+    [references, selectedReferenceId],
+  );
 
-    return base.filter((note: any) => {
-      const referenceNodeId = Number(note.referenceNodeId ?? note.reference_node_id ?? note.referenceNode?.id ?? note.reference_node?.id ?? 0);
-      const nestedReferenceId = Number(note.referenceNode?.referenceId ?? note.reference_node?.reference_id ?? 0);
-      const referenceId = nestedReferenceId > 0 ? nestedReferenceId : Number(referenceIdByNodeId[referenceNodeId] ?? 0);
-      const referenceTitle = String(referencesById.get(referenceId)?.title || "").toLowerCase();
-      const referenceLabel = String(note.referenceNode?.label || note.reference_node?.label || "").toLowerCase();
-      const directChannelId = Number(note.channelId ?? note.channel_id ?? 0);
-      const channelId = directChannelId > 0 ? directChannelId : Number(channelIdByReferenceId[referenceId] ?? 0);
-      const channelName = String(channelsById.get(channelId)?.name || "").toLowerCase();
-      const content = String(note.content || "").toLowerCase();
+  const selectedChannelId = useMemo(() => {
+    if (!selectedReferenceId) return null;
+    const link = (channelReferenceLinks ?? []).find(
+      (row: any) => Number(row?.reference_id ?? row?.referenceId ?? 0) === Number(selectedReferenceId),
+    );
+    const channelId = Number(link?.channel_id ?? link?.channelId ?? 0);
+    return channelId > 0 ? channelId : null;
+  }, [channelReferenceLinks, selectedReferenceId]);
 
-      return content.includes(term) || referenceTitle.includes(term) || referenceLabel.includes(term) || channelName.includes(term);
-    })
-  }, [allNotes, user?.id, search, referencesById, channelsById, referenceIdByNodeId, channelIdByReferenceId]);
+  const selectedChannel = useMemo(
+    () => (channels ?? []).find((channel: any) => Number(channel?.id ?? 0) === Number(selectedChannelId ?? 0)) ?? null,
+    [channels, selectedChannelId],
+  );
 
-  const getReferenceMeta = (note: any) => {
-    const refNode = note.referenceNode ?? note.reference_node;
-    const referenceNodeId = Number(note.referenceNodeId ?? note.reference_node_id ?? refNode?.id ?? 0);
-    const nestedReferenceId = Number(refNode?.referenceId ?? refNode?.reference_id ?? 0);
-    const referenceId = nestedReferenceId > 0 ? nestedReferenceId : Number(referenceIdByNodeId[referenceNodeId] ?? 0);
-    const reference = referencesById.get(referenceId);
+  const selectedNodes = useMemo(
+    () => (nodesByReferenceId.get(Number(selectedReferenceId ?? 0)) ?? []).slice().sort((a, b) => getNodePosition(a) - getNodePosition(b)),
+    [nodesByReferenceId, selectedReferenceId],
+  );
 
-    return {
-      referenceId: referenceId || null,
-      text: reference?.title || refNode?.label || "Sem referencia",
-    };
-  };
+  const selectedRootNodes = useMemo(
+    () => getReferenceVisibleRootNodes((selectedReference as any)?.title, selectedNodes),
+    [selectedNodes, selectedReference],
+  );
 
-  const getChannelMeta = (note: any) => {
-    const reference = getReferenceMeta(note);
-    const directChannelId = Number(note.channelId ?? note.channel_id ?? 0);
-    const channelId = directChannelId > 0 ? directChannelId : Number(channelIdByReferenceId[Number(reference.referenceId ?? 0)] ?? 0);
-    const channel = channelsById.get(channelId);
+  const selectedReadingRows = useMemo(
+    () => flattenNodesForReading(selectedNodes, selectedRootNodes),
+    [selectedNodes, selectedRootNodes],
+  );
 
-    return {
-      channelId: channelId || null,
-      text: channel?.name || (channelId ? `Channel ${channelId}` : "Sem channel"),
-    };
-  };
+  const isLoading = loadingReferences || loadingChannels || loadingChannelReferenceLinks || loadingAllNodes;
 
-  const handleDeleteNote = (id: number) => {
-    if (!window.confirm("Excluir esta note?")) return;
-
-    deleteNoteMutation.mutate(
-      { id },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getListNotesQueryKey() });
-        },
-      },
+  const toggleChannel = (channelId: number) => {
+    setExpandedChannelIds((prev) =>
+      prev.includes(channelId) ? prev.filter((id) => id !== channelId) : [...prev, channelId],
     );
   };
 
+  const toggleReference = (referenceId: number) => {
+    setExpandedReferenceIds((prev) =>
+      prev.includes(referenceId) ? prev.filter((id) => id !== referenceId) : [...prev, referenceId],
+    );
+  };
+
+  const selectReference = (referenceId: number, channelId?: number) => {
+    if (channelId && !expandedChannelIds.includes(channelId)) {
+      setExpandedChannelIds((prev) => [...prev, channelId]);
+    }
+    setLocation(`/references?ref=${referenceId}&view=reading`);
+  };
+
+  if (selectedReferenceId) {
+    return <ReferenceDetail />;
+  }
+
   return (
     <AppLayout>
-      <div className="max-w-6xl mx-auto p-6 md:p-10 space-y-10">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-border/50 pb-8">
-          <div>
-            <h1 className="text-4xl font-display font-bold mb-3">Library</h1>
-            <p className="text-lg text-muted-foreground font-serif">Suas notas mais recentes, com contexto de referencia e channel.</p>
-          </div>
+      <div className="flex flex-col md:flex-row h-full md:h-[calc(100vh-theme(spacing.16))] lg:h-[calc(100vh)]">
+        <div className="w-full md:w-80 lg:w-96 border-r border-border/50 bg-sidebar/50 flex flex-col h-[50vh] md:h-full overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+            {isLoading ? (
+              <div className="flex justify-center p-4">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : channelRows.length === 0 && referencesWithoutChannel.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic p-4 font-serif">Nenhuma referencia encontrada.</p>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="rounded-xl border border-border/50 bg-card/70 overflow-hidden">
+                  <div className="px-2 py-2 space-y-1.5">
+                    {channelRows.map((channel) => {
+                      const isExpanded = expandedChannelIds.includes(channel.id);
+                      return (
+                        <div
+                          key={channel.id}
+                          className="rounded-lg border border-border/40 bg-background/70 overflow-hidden"
+                        >
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-secondary/40 transition-colors"
+                            onClick={() => toggleChannel(channel.id)}
+                          >
+                            <span className="flex h-5 w-5 items-center justify-center text-muted-foreground">
+                              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </span>
+                            <p className="truncate text-sm font-semibold text-foreground">{channel.name}</p>
+                          </button>
 
-          <div className="flex items-center gap-3">
-            <div className="relative w-full md:w-64">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar em notas, referencia ou channel..."
-                className="pl-9 rounded-xl bg-card border-border/50"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <Link href="/notes/new">
-              <Button className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/20">
-                <Plus className="w-4 h-4 mr-2" />
-                Nova nota
-              </Button>
-            </Link>
+                          {isExpanded && (
+                            <div className="px-2 pb-2 pt-1 space-y-1">
+                              {channel.references.length === 0 ? (
+                                <p className="px-2 py-1 text-xs text-muted-foreground">Sem referencias vinculadas.</p>
+                              ) : (
+                                channel.references.map((reference: any) => (
+                                  <div
+                                    key={reference.id}
+                                    className="rounded-lg border border-border/40 bg-card/80 overflow-hidden"
+                                  >
+                                    <div
+                                      className={`flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors ${Number(selectedReferenceId ?? 0) === Number(reference.id) ? "bg-primary/10" : "hover:bg-secondary/40"}`}
+                                      onClick={() => selectReference(Number(reference.id), channel.id)}
+                                    >
+                                      <button
+                                        type="button"
+                                        className="w-5 h-5 flex items-center justify-center text-muted-foreground"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          toggleReference(Number(reference.id));
+                                        }}
+                                      >
+                                        {expandedReferenceIds.includes(Number(reference.id)) ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                      </button>
+                                      <span className={`truncate text-sm ${Number(selectedReferenceId ?? 0) === Number(reference.id) ? "text-primary font-medium" : "text-foreground"}`}>{reference.title}</span>
+                                    </div>
+
+                                    {expandedReferenceIds.includes(Number(reference.id)) && (
+                                      <div className="px-2 pb-2 pt-1 border-t border-border/40">
+                                        {(() => {
+                                          const referenceNodes = (nodesByReferenceId.get(Number(reference.id)) ?? [])
+                                            .slice()
+                                            .sort((a, b) => getNodePosition(a) - getNodePosition(b));
+                                          const visibleRoots = getReferenceVisibleRootNodes(reference.title, referenceNodes);
+                                          const treeRows = flattenNodesForReading(referenceNodes, visibleRoots);
+
+                                          if (treeRows.length === 0) {
+                                            return <p className="px-1 py-1 text-xs text-muted-foreground">Sem nodes.</p>;
+                                          }
+
+                                          return (
+                                            <div className="space-y-0.5">
+                                              {treeRows.map(({ node, level }) => (
+                                                <div
+                                                  key={`tree-${reference.id}-${node.id}`}
+                                                  className="truncate rounded px-1.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                                                  style={{ paddingLeft: `${level * 12 + 6}px` }}
+                                                >
+                                                  {node.label}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          );
+                                        })()}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {referencesWithoutChannel.map((reference: any) => (
+                      <button
+                        key={`standalone-${reference.id}`}
+                        type="button"
+                        className={`flex w-full items-center gap-2 rounded-lg border border-border/40 bg-background/70 px-3 py-2.5 text-left transition-colors ${Number(selectedReferenceId ?? 0) === Number(reference.id) ? "bg-primary/10 text-primary" : "hover:bg-secondary/40"}`}
+                        onClick={() => selectReference(Number(reference.id))}
+                      >
+                        <span className="flex h-5 w-5 items-center justify-center text-muted-foreground">
+                          <ChevronRight className="w-4 h-4" />
+                        </span>
+                        <span className="truncate text-sm font-semibold text-foreground">{reference.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {loadingNotes ? (
-          <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
-        ) : myRecentNotes?.length === 0 ? (
-          <div className="rounded-3xl border border-border/50 bg-card/70 px-6 py-12 text-center">
-            <PenTool className="w-10 h-10 text-muted-foreground/50 mx-auto mb-4" />
-            <p className="text-muted-foreground font-serif">Nenhuma nota encontrada.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {myRecentNotes.map((note: any) => {
-              const reference = getReferenceMeta(note);
-              const channel = getChannelMeta(note);
-              const createdAt = (note as any).createdAt || (note as any).created_at;
+        <div className="flex-1 flex flex-col h-auto md:h-full overflow-hidden bg-background">
+          {!selectedReference ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center opacity-50">
+              <AlignLeft className="w-16 h-16 mb-4 text-muted-foreground" />
+              <h2 className="text-xl font-display text-foreground">Selecione uma referencia</h2>
+              <p className="text-sm text-muted-foreground font-serif mt-2">Clique em uma referencia na esquerda para navegar sem sair desta pagina.</p>
+            </div>
+          ) : (
+            <>
+              <div className="shrink-0 p-6 border-b border-border/50 bg-card/70 space-y-3">
+                {selectedChannel ? (
+                  <p className="text-sm text-muted-foreground"><span className="font-semibold text-foreground">{selectedChannel.name}</span></p>
+                ) : null}
+                <h2 className="text-2xl font-display font-semibold text-foreground">{selectedReference.title}</h2>
+              </div>
 
-              return (
-                <Card key={note.id} className="rounded-2xl border-border/50 shadow-sm hover:shadow-lg transition-all duration-300 bg-card group">
-                  <CardHeader className="pb-3 border-b border-border/30">
-                    <div className="flex justify-between items-start gap-3">
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">
-                          {createdAt ? format(new Date(createdAt), "MMMM d, yyyy") : ""}
-                        </p>
-                        <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground bg-secondary px-2 py-1 rounded-md border border-border/50">
-                          {note.visibility}
-                        </span>
-                      </div>
-                      <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Link href={`/notes/${note.id}/edit`}>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary">
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDeleteNote(note.id)}
-                          disabled={deleteNoteMutation.isPending}
+              <div className="flex-1 overflow-y-auto p-8 md:p-10 custom-scrollbar">
+                {selectedReadingRows.length === 0 ? (
+                  <div className="max-w-3xl opacity-60">
+                    <h3 className="text-xl font-display text-foreground">Sem estrutura definida</h3>
+                    <p className="text-sm text-muted-foreground font-serif mt-2">Esta referencia ainda nao possui nodes cadastrados.</p>
+                  </div>
+                ) : (
+                  <div className="max-w-3xl space-y-3">
+                    {selectedReadingRows.map(({ node, level }) => {
+                      const label = String((node as any)?.label || "").trim();
+                      const content = String((node as any)?.content || "").trim();
+                      const type = String((node as any)?.type || "").toUpperCase();
+
+                      return (
+                        <div
+                          key={node.id}
+                          className="rounded-2xl border border-border/60 bg-card p-4 md:p-5 shadow-sm"
+                          style={{ marginLeft: `${level * 8}px` }}
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-4 space-y-4">
-                    <p className="font-serif text-foreground/90 text-lg leading-relaxed line-clamp-6">
-                      {note.content}
-                    </p>
-
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <Link href={`/references/${reference.referenceId}`}>
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background px-3 py-1 text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors">
-                          <BookOpen className="w-3.5 h-3.5" />
-                          {reference.text}
-                        </span>
-                      </Link>
-
-                      <Link href={`/channels/${channel.channelId}`}>
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background px-3 py-1 text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors">
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          {channel.text}
-                        </span>
-                      </Link>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
+                          <div className="mb-2">
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground/80">{type || "NODE"}</p>
+                            <h3 className="text-xl md:text-2xl font-display font-semibold text-foreground/95 mt-1">{label || "Sem titulo"}</h3>
+                          </div>
+                          {content ? (
+                            <p className="font-serif text-xl leading-loose text-foreground whitespace-pre-wrap">{content}</p>
+                          ) : (
+                            <p className="text-sm italic text-muted-foreground">Sem conteudo textual.</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </AppLayout>
   );

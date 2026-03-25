@@ -127,10 +127,19 @@ export default function ReferenceDetail() {
   const { id } = useParams();
   const [, setLocation] = useLocation();
   const search = useSearch();
-  const refId = parseInt(id || "0", 10);
+  const refId = useMemo(() => {
+    const params = new URLSearchParams(search);
+    const raw = id || params.get("ref") || "0";
+    return parseInt(raw, 10);
+  }, [id, search]);
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const isReadingView = useMemo(() => new URLSearchParams(search).get("view") === "reading", [search]);
+  const isReadingView = useMemo(() => {
+    const params = new URLSearchParams(search);
+    const explicitReading = params.get("view") === "reading";
+    const queryRefMode = !id && Boolean(params.get("ref"));
+    return explicitReading || queryRefMode;
+  }, [search, id]);
   
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [isActiveReferenceExpanded, setIsActiveReferenceExpanded] = useState(true);
@@ -832,6 +841,18 @@ export default function ReferenceDetail() {
         
         {/* Left Pane: Hierarchy Tree */}
         <div className="w-full md:w-80 lg:w-96 border-r border-border/50 bg-sidebar/50 flex flex-col h-[50vh] md:h-full overflow-hidden">
+          <div className="shrink-0 border-b border-border/50 bg-card/70 px-3 py-2">
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+              onClick={() => setLocation("/references")}
+              aria-label="Voltar para referencias"
+              title="Voltar"
+            >
+              <ChevronRight className="h-4 w-4 rotate-180" />
+            </button>
+          </div>
+
           <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
             {loadingNodes ? (
               <div className="flex justify-center p-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
@@ -922,6 +943,7 @@ export default function ReferenceDetail() {
                     })}
                   </div>
                 </div>
+
               </div>
             )}
           </div>
