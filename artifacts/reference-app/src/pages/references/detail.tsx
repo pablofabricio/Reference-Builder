@@ -87,14 +87,20 @@ const TreeNode = ({
         onClick={(e) => {
           e.stopPropagation();
           onSelect(node.id);
-          if (hasChildren) {
-            setExpanded((prev) => !prev);
-          }
         }}
       >
-        <div className="w-5 h-5 flex items-center justify-center mr-1 text-muted-foreground hover:text-foreground">
+        <button
+          type="button"
+          className="w-5 h-5 flex items-center justify-center mr-1 text-muted-foreground hover:text-foreground"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!hasChildren) return;
+            setExpanded((prev) => !prev);
+          }}
+          aria-label={expanded ? "Fechar secao" : "Abrir secao"}
+        >
           {hasChildren ? (expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />) : <span className="w-4 h-4" />}
-        </div>
+        </button>
         <span className="text-sm font-medium font-sans truncate">{node.label}</span>
       </div>
       
@@ -482,6 +488,21 @@ export default function ReferenceDetail() {
     () => flattenNodesForReading(nodes, currentReferenceRootNodes),
     [nodes, currentReferenceRootNodes],
   );
+
+  const currentReadingNodeIndex = useMemo(() => {
+    if (!selectedNodeId) return -1;
+    return readingNodes.findIndex(({ node }) => Number(node.id) === Number(selectedNodeId));
+  }, [readingNodes, selectedNodeId]);
+
+  const previousReadingNode = useMemo(() => {
+    if (currentReadingNodeIndex <= 0) return null;
+    return readingNodes[currentReadingNodeIndex - 1]?.node ?? null;
+  }, [readingNodes, currentReadingNodeIndex]);
+
+  const nextReadingNode = useMemo(() => {
+    if (currentReadingNodeIndex < 0 || currentReadingNodeIndex >= readingNodes.length - 1) return null;
+    return readingNodes[currentReadingNodeIndex + 1]?.node ?? null;
+  }, [readingNodes, currentReadingNodeIndex]);
   
   // Fetch notes for the selected node
   const { data: notes, isLoading: loadingNotes } = useListNotes(
@@ -741,25 +762,58 @@ export default function ReferenceDetail() {
     setLocation(`/references/${Number(targetReference.id)}?view=reading`);
   };
 
+  const goToReadingNode = (targetNode: any | null) => {
+    if (!targetNode) return;
+    setSelectedNodeId(Number(targetNode.id));
+  };
+
+  const activePreviousTarget = isReadingView
+    ? (selectedNodeId ? previousReadingNode : previousReference)
+    : null;
+
+  const activeNextTarget = isReadingView
+    ? (selectedNodeId ? nextReadingNode : nextReference)
+    : null;
+
   const goPreviousReference = () => goToReferenceInReading(previousReference);
   const goNextReference = () => goToReferenceInReading(nextReference);
+  const goPreviousReadingNode = () => goToReadingNode(previousReadingNode);
+  const goNextReadingNode = () => goToReadingNode(nextReadingNode);
+
+  const handlePreviousNavigation = () => {
+    if (!isReadingView) return;
+    if (selectedNodeId) {
+      goPreviousReadingNode();
+      return;
+    }
+    goPreviousReference();
+  };
+
+  const handleNextNavigation = () => {
+    if (!isReadingView) return;
+    if (selectedNodeId) {
+      goNextReadingNode();
+      return;
+    }
+    goNextReference();
+  };
 
   const handleReadingWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (!isReadingView || selectedNodeId) return;
+    if (!isReadingView) return;
     if (readingSwipeLockRef.current) return;
 
     const absX = Math.abs(event.deltaX);
     const absY = Math.abs(event.deltaY);
     if (absX < 45 || absX <= absY) return;
 
-    if (event.deltaX > 0 && nextReference) {
+    if (event.deltaX > 0 && activeNextTarget) {
       event.preventDefault();
       readingSwipeLockRef.current = true;
-      goNextReference();
-    } else if (event.deltaX < 0 && previousReference) {
+      handleNextNavigation();
+    } else if (event.deltaX < 0 && activePreviousTarget) {
       event.preventDefault();
       readingSwipeLockRef.current = true;
-      goPreviousReference();
+      handlePreviousNavigation();
     } else {
       return;
     }
@@ -817,29 +871,36 @@ export default function ReferenceDetail() {
                           key={relatedReferenceId}
                           className={`rounded-lg border overflow-hidden ${isActiveReference ? "border-primary/30 bg-primary/5" : "border-border/40 bg-background/70"}`}
                         >
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-secondary/40 transition-colors"
+                          <div
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-secondary/40 transition-colors cursor-pointer"
                             onClick={() => {
                               if (isActiveReference) {
                                 if (isReadingView) {
                                   setSelectedNodeId(null);
                                 }
-                                setIsActiveReferenceExpanded((prev) => !prev);
                                 return;
                               }
                               setLocation(`/references/${relatedReferenceId}${isReadingView ? "?view=reading" : ""}`);
                             }}
                           >
-                            <span className="flex h-5 w-5 items-center justify-center text-muted-foreground">
+                            <button
+                              type="button"
+                              className="flex h-5 w-5 items-center justify-center text-muted-foreground"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (!isActiveReference || relatedRootNodes.length === 0) return;
+                                setIsActiveReferenceExpanded((prev) => !prev);
+                              }}
+                              aria-label={showReferenceNodes ? "Fechar referencia" : "Abrir referencia"}
+                            >
                               {showReferenceNodes && relatedRootNodes.length > 0 ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                            </span>
+                            </button>
                             <div className="min-w-0">
                               <p className={`truncate text-sm font-semibold ${isActiveReference ? "text-primary" : "text-foreground"}`}>
                                 {row.title}
                               </p>
                             </div>
-                          </button>
+                          </div>
 
                           {showReferenceNodes && relatedRootNodes.length > 0 && (
                             <div className="px-2 pb-2 pt-1">
@@ -868,15 +929,17 @@ export default function ReferenceDetail() {
 
         {/* Right Pane: Content & Notes */}
         <div className="relative flex-1 flex flex-col h-auto md:h-full overflow-hidden bg-background">
-          {isReadingView && (previousReference || nextReference) && (
+          {isReadingView && (activePreviousTarget || activeNextTarget) && (
             <div className="pointer-events-none absolute inset-0 z-20 hidden md:block">
-              {previousReference ? (
+              {activePreviousTarget ? (
                 <div className="pointer-events-auto absolute left-4 top-1/2 -translate-y-1/2">
                   <button
                     type="button"
                     className="inline-flex items-center justify-center rounded-full border border-border/70 bg-card/95 p-2.5 text-foreground shadow-sm backdrop-blur hover:bg-card"
-                    onClick={goPreviousReference}
-                    aria-label={`Voltar para ${String((previousReference as any).title || "semana anterior")}`}
+                    onClick={handlePreviousNavigation}
+                    aria-label={selectedNodeId
+                      ? `Voltar para ${String((previousReadingNode as any)?.label || "node anterior")}`
+                      : `Voltar para ${String((previousReference as any)?.title || "semana anterior")}`}
                     title="Voltar"
                   >
                     <ChevronRight className="h-4 w-4 rotate-180" />
@@ -884,13 +947,15 @@ export default function ReferenceDetail() {
                 </div>
               ) : null}
 
-              {nextReference ? (
+              {activeNextTarget ? (
                 <div className="pointer-events-auto absolute right-4 top-1/2 -translate-y-1/2">
                   <button
                     type="button"
                     className="inline-flex items-center justify-center rounded-full border border-border/70 bg-card/95 p-2.5 text-foreground shadow-sm backdrop-blur hover:bg-card"
-                    onClick={goNextReference}
-                    aria-label={`Ir para ${String((nextReference as any).title || "proxima semana")}`}
+                    onClick={handleNextNavigation}
+                    aria-label={selectedNodeId
+                      ? `Ir para ${String((nextReadingNode as any)?.label || "proximo node")}`
+                      : `Ir para ${String((nextReference as any)?.title || "proxima semana")}`}
                     title="Proximo"
                   >
                     <ChevronRight className="h-4 w-4" />
@@ -1138,9 +1203,8 @@ export default function ReferenceDetail() {
                 </div>
               </div>
 
-              {(
-                <div className="flex-1 overflow-y-auto p-8 md:p-12 custom-scrollbar bg-background">
-                  <div className="max-w-3xl mx-auto">
+              <div className="flex-1 overflow-y-auto p-8 md:p-12 custom-scrollbar bg-background">
+                <div className="max-w-3xl mx-auto">
                     <div className="mb-8">
                       <div className="flex items-center justify-end">
                         <Button
@@ -1157,11 +1221,7 @@ export default function ReferenceDetail() {
 
                     {loadingNotes ? (
                       <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-                    ) : notes?.length === 0 ? (
-                      <div className="text-center p-12 border border-dashed border-border rounded-2xl bg-card/50">
-                        <p className="text-muted-foreground font-serif">No reflections here yet. Be the first to write one.</p>
-                      </div>
-                    ) : (
+                    ) : notes?.length === 0 ? null : (
                       <div className="space-y-4">
                         {isCreatingNoteCard && (
                           <div
@@ -1317,9 +1377,8 @@ export default function ReferenceDetail() {
                         ))}
                       </div>
                     )}
-                  </div>
                 </div>
-              )}
+              </div>
             </>
           )}
         </div>
