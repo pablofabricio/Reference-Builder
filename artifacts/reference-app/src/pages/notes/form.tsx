@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
-import { useCreateNote, useGetNote, useUpdateNote, getListNotesQueryKey } from "@workspace/api-client-react";
+import { useCreateNote, useGetNote, useUpdateNote, getGetNoteQueryKey, getListNotesQueryKey } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -31,7 +31,7 @@ export default function NoteForm({ params }: { params?: { id?: string } }) {
   const [visibility, setVisibility] = useState<"PRIVATE" | "PUBLIC" | "CHANNEL">("PRIVATE");
 
   const { data: existingNote, isLoading: loadingExisting } = useGetNote(noteId, { 
-    query: { enabled: isEditing } 
+    query: { enabled: isEditing, queryKey: getGetNoteQueryKey(noteId) } 
   });
 
   const createMutation = useCreateNote();
@@ -58,7 +58,7 @@ export default function NoteForm({ params }: { params?: { id?: string } }) {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListNotesQueryKey() });
           toast({ title: "Note updated" });
-          setLocation("/notes");
+          setLocation("/references");
         }
       });
     } else {
@@ -75,7 +75,7 @@ export default function NoteForm({ params }: { params?: { id?: string } }) {
           toast({ title: "Note saved" });
           if (channelId) setLocation(`/channels/${channelId}`);
           else if (refNodeId) history.back();
-          else setLocation("/notes");
+          else setLocation("/references");
         }
       });
     }

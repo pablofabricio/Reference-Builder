@@ -4,7 +4,6 @@ import { useAuth } from "@/lib/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   BookOpen, 
-  PenTool, 
   MessageSquare, 
   Home, 
   LogOut, 
@@ -26,11 +25,75 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navItems = [
     { href: "/home", label: "Dashboard", icon: Home },
     { href: "/references", label: "Library", icon: BookOpen },
-    { href: "/notes", label: "My Notes", icon: PenTool },
     { href: "/channels", label: "Channels", icon: MessageSquare },
   ];
 
-  const SidebarContent = () => (
+  const DesktopSidebarContent = () => (
+    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border relative z-10 items-center py-5">
+      <div className="group relative mb-6">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/10 shadow-sm">
+          <Compass className="w-5 h-5" />
+        </div>
+        <div className="pointer-events-none absolute left-[calc(100%+0.75rem)] top-1/2 -translate-y-1/2 rounded-xl border border-border/60 bg-background/95 px-3 py-2 text-sm font-medium text-foreground shadow-lg opacity-0 translate-x-2 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0">
+          Reference
+        </div>
+      </div>
+
+      <nav className="flex-1 flex flex-col items-center gap-3">
+        {navItems.map((item) => {
+          const isActive = location === item.href || location.startsWith(`${item.href}/`);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="group relative"
+            >
+              <div
+                className={`
+                  flex h-12 w-12 items-center justify-center rounded-2xl border transition-all duration-200
+                  ${isActive
+                    ? "border-primary bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                    : "border-transparent text-sidebar-foreground hover:border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  }
+                `}
+              >
+                <item.icon className="w-5 h-5" />
+              </div>
+              <div className="pointer-events-none absolute left-[calc(100%+0.75rem)] top-1/2 -translate-y-1/2 rounded-xl border border-border/60 bg-background/95 px-3 py-2 text-sm font-medium text-foreground shadow-lg opacity-0 translate-x-2 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0">
+                {item.label}
+              </div>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="mt-6 flex flex-col items-center gap-3 border-t border-sidebar-border pt-4 w-full">
+        <div className="group relative">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground font-display font-bold text-lg border border-border shadow-sm">
+            {user?.name?.charAt(0).toUpperCase() || "U"}
+          </div>
+          <div className="pointer-events-none absolute left-[calc(100%+0.75rem)] top-1/2 -translate-y-1/2 min-w-44 rounded-xl border border-border/60 bg-background/95 px-3 py-2 shadow-lg opacity-0 translate-x-2 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0">
+            <p className="text-sm font-semibold truncate text-foreground font-sans">{user?.name}</p>
+            <p className="text-xs text-muted-foreground truncate font-sans">{user?.email}</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="group relative flex h-12 w-12 items-center justify-center rounded-2xl border border-transparent text-muted-foreground transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+          onClick={() => logout()}
+          aria-label="Sign out"
+        >
+          <LogOut className="w-5 h-5" />
+          <div className="pointer-events-none absolute left-[calc(100%+0.75rem)] top-1/2 -translate-y-1/2 rounded-xl border border-border/60 bg-background/95 px-3 py-2 text-sm font-medium text-foreground shadow-lg opacity-0 translate-x-2 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0">
+            Sign Out
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+
+  const MobileSidebarContent = () => (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border relative z-10">
       <div className="p-6 flex items-center gap-3">
         <div className="bg-primary/10 p-2 rounded-xl text-primary">
@@ -45,14 +108,14 @@ export function AppLayout({ children }: AppLayoutProps) {
         {navItems.map((item) => {
           const isActive = location === item.href || location.startsWith(`${item.href}/`);
           return (
-            <Link 
-              key={item.href} 
+            <Link
+              key={item.href}
               href={item.href}
               onClick={() => setIsMobileMenuOpen(false)}
               className={`
                 flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200
-                ${isActive 
-                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
+                ${isActive
+                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 }
               `}
@@ -74,8 +137,8 @@ export function AppLayout({ children }: AppLayoutProps) {
             <p className="text-xs text-muted-foreground truncate font-sans">{user?.email}</p>
           </div>
         </div>
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors rounded-xl"
           onClick={() => logout()}
         >
@@ -89,8 +152,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="min-h-screen bg-background flex w-full">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex w-72 flex-col fixed inset-y-0 left-0 z-50">
-        <SidebarContent />
+      <aside className="hidden md:flex w-24 flex-col fixed inset-y-0 left-0 z-50 overflow-visible">
+        <DesktopSidebarContent />
       </aside>
 
       {/* Mobile Header & Nav */}
@@ -113,7 +176,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden"
           >
             <div className="w-4/5 max-w-sm h-full pt-16 shadow-2xl">
-              <SidebarContent />
+              <MobileSidebarContent />
             </div>
             <div 
               className="absolute inset-y-0 right-0 left-[80%] max-w-[calc(100%-24rem)]" 
@@ -124,7 +187,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-h-screen md:pl-72 pt-16 md:pt-0">
+      <main className="flex-1 flex flex-col min-h-screen md:pl-24 pt-16 md:pt-0">
         <div className="flex-1 w-full bg-texture">
           <AnimatePresence mode="wait">
             <motion.div

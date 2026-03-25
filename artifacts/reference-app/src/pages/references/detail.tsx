@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams } from "wouter";
-import { useGetReference, useListReferenceNodes, useListNotes, type ReferenceNode } from "@workspace/api-client-react";
+import { getListNotesQueryKey, useGetReference, useListReferenceNodes, useListNotes, type ReferenceNode } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Loader2, ChevronRight, ChevronDown, AlignLeft, FileText, Plus } from "lucide-react";
@@ -84,7 +84,12 @@ export default function ReferenceDetail() {
   // Fetch notes for the selected node
   const { data: notes, isLoading: loadingNotes } = useListNotes(
     selectedNodeId ? { referenceNodeId: selectedNodeId } : undefined,
-    { query: { enabled: !!selectedNodeId } }
+    {
+      query: {
+        enabled: !!selectedNodeId,
+        queryKey: getListNotesQueryKey(selectedNodeId ? { referenceNodeId: selectedNodeId } : undefined),
+      },
+    }
   );
 
   const rootNodes = nodes?.filter(n => !n.parentNodeId).sort((a, b) => a.position - b.position) || [];
