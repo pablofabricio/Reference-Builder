@@ -7,6 +7,7 @@ import { Loader2, ChevronRight, ChevronDown, AlignLeft, Plus, Copy, Trash2, Mess
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 const getNodeParentId = (node: ReferenceNode | any) => node.parentNodeId ?? node.parent_node_id ?? null;
 const getNodePosition = (node: ReferenceNode | any) => Number(node.position ?? 0);
@@ -133,6 +134,7 @@ export default function ReferenceDetail() {
     return parseInt(raw, 10);
   }, [id, search]);
   const { user } = useAuth();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const isReadingView = useMemo(() => {
     const params = new URLSearchParams(search);
@@ -140,6 +142,12 @@ export default function ReferenceDetail() {
     const queryRefMode = !id && Boolean(params.get("ref"));
     return explicitReading || queryRefMode;
   }, [search, id]);
+  const initialNodeIdFromQuery = useMemo(() => {
+    const params = new URLSearchParams(search);
+    const raw = params.get("node") || "0";
+    const parsed = Number(raw);
+    return parsed > 0 ? parsed : null;
+  }, [search]);
   
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [isActiveReferenceExpanded, setIsActiveReferenceExpanded] = useState(true);
@@ -296,16 +304,15 @@ export default function ReferenceDetail() {
   }, []);
 
   useEffect(() => {
-    setSelectedNodeId(null);
+    setSelectedNodeId(initialNodeIdFromQuery);
     setIsActiveReferenceExpanded(true);
     setInlineNoteDraft("");
     setIsCreatingNoteCard(false);
     setEditingNodeId(null);
-  }, [refId]);
+  }, [refId, initialNodeIdFromQuery]);
 
   useEffect(() => {
     setInlineNoteDraft("");
-    setIsCreatingNoteCard(false);
     setEditingNodeId(null);
     setEditingNodeSnapshot(null);
     setSelectedNoteCardId(null);
@@ -632,7 +639,13 @@ export default function ReferenceDetail() {
 
   const createInlineNote = async () => {
     const content = inlineNoteDraft.trim();
-    if (!selectedNodeId || !content || savingNoteInline) return;
+    const fallbackNodeId = Number(readingNodes?.[0]?.node?.id ?? nodes?.[0]?.id ?? 0);
+    const targetNodeId = Number(selectedNodeId ?? fallbackNodeId);
+    if (!content || savingNoteInline) return;
+
+    if (!selectedNodeId && targetNodeId > 0) {
+      setSelectedNodeId(targetNodeId);
+    }
 
     setSavingNoteInline(true);
     try {
@@ -646,23 +659,37 @@ export default function ReferenceDetail() {
         body: JSON.stringify({
           content,
           visibility: currentChannelId ? "CHANNEL" : "PRIVATE",
-          reference_node_id: selectedNodeId,
+          ...(targetNodeId > 0 ? { reference_node_id: targetNodeId } : {}),
           ...(currentChannelId ? { channel_id: currentChannelId } : {}),
         }),
       });
 
-      if (!response.ok) throw new Error("Nao foi possivel criar a nota");
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload?.message || "Nao foi possivel criar a nota");
+      }
 
       setInlineNoteDraft("");
       setIsCreatingNoteCard(false);
       queryClient.invalidateQueries({ queryKey: getListNotesQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getListNotesQueryKey({ referenceNodeId: selectedNodeId }) });
+      if (targetNodeId > 0) {
+        queryClient.invalidateQueries({ queryKey: getListNotesQueryKey({ referenceNodeId: targetNodeId }) });
+      }
+      toast({ title: "Nota criada" });
+    } catch (error: any) {
+      toast({ title: error?.message || "Erro ao criar nota", variant: "destructive" });
     } finally {
       setSavingNoteInline(false);
     }
   };
 
   const openNewNoteCard = () => {
+    if (!selectedNodeId) {
+      const fallbackNodeId = Number(readingNodes?.[0]?.node?.id ?? nodes?.[0]?.id ?? 0);
+      if (fallbackNodeId > 0) {
+        setSelectedNodeId(fallbackNodeId);
+      }
+    }
     setIsCreatingNoteCard(true);
     setSelectedNoteCardId(-1);
   };
@@ -1241,65 +1268,65 @@ export default function ReferenceDetail() {
                       </div>
                     </div>
 
+                    {isCreatingNoteCard && (
+                      <div
+                        className={`rounded-2xl border bg-card p-8 shadow-sm transition-colors mb-4 ${selectedNoteCardId === -1 ? "border-primary/40" : "border-border"}`}
+                        onClick={() => setSelectedNoteCardId(-1)}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div
+                            contentEditable
+                            suppressContentEditableWarning
+                            className="w-full font-serif text-xl leading-loose text-foreground whitespace-pre-wrap outline-none"
+                            onInput={(e) => setInlineNoteDraft((e.currentTarget.textContent ?? "").replace(/\u00a0/g, " "))}
+                            ref={newNoteEditorRef}
+                          />
+
+                          {selectedNoteCardId === -1 && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                className="inline-flex items-center justify-center rounded-md border border-border/50 p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                                onClick={() => setInlineNoteDraft("")}
+                                aria-label="Limpar nota"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setInlineNoteDraft("");
+                              setIsCreatingNoteCard(false);
+                              setSelectedNoteCardId(null);
+                            }}
+                            disabled={savingNoteInline}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={createInlineNote}
+                            disabled={savingNoteInline || !inlineNoteDraft.trim()}
+                          >
+                            {savingNoteInline ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null}
+                            Salvar nota
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
                     {loadingNotes ? (
                       <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
                     ) : notes?.length === 0 ? null : (
                       <div className="space-y-4">
-                        {isCreatingNoteCard && (
-                          <div
-                            className={`rounded-2xl border bg-card p-8 shadow-sm transition-colors ${selectedNoteCardId === -1 ? "border-primary/40" : "border-border"}`}
-                            onClick={() => setSelectedNoteCardId(-1)}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div
-                                contentEditable
-                                suppressContentEditableWarning
-                                className="w-full font-serif text-xl leading-loose text-foreground whitespace-pre-wrap outline-none"
-                                onInput={(e) => setInlineNoteDraft((e.currentTarget.textContent ?? "").replace(/\u00a0/g, " "))}
-                                ref={newNoteEditorRef}
-                              />
-
-                              {selectedNoteCardId === -1 && (
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    className="inline-flex items-center justify-center rounded-md border border-border/50 p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
-                                    onClick={() => setInlineNoteDraft("")}
-                                    aria-label="Limpar nota"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-end gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setInlineNoteDraft("");
-                                  setIsCreatingNoteCard(false);
-                                  setSelectedNoteCardId(null);
-                                }}
-                                disabled={savingNoteInline}
-                              >
-                                Cancelar
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={createInlineNote}
-                                disabled={savingNoteInline || !inlineNoteDraft.trim()}
-                              >
-                                {savingNoteInline ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null}
-                                Salvar nota
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-
                         {notes?.map(note => (
                           (() => {
                             const noteId = Number((note as any).id ?? 0);

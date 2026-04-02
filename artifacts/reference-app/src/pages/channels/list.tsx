@@ -74,6 +74,13 @@ export default function ChannelsList() {
   const isOwnProfile = !resolvedUserId || viewedUserId === Number(user?.id);
 
   useEffect(() => {
+    setProfile(null);
+    setDescriptionDraft("");
+    setProfileError(null);
+    setAvatarLoadFailed(false);
+  }, [viewedUserId]);
+
+  useEffect(() => {
     let isMounted = true;
 
     const loadProfile = async () => {
@@ -377,15 +384,22 @@ export default function ChannelsList() {
     return Array.isArray(profile?.channels) ? profile.channels : [];
   }, [isOwnProfile, ownChannels, subscribedChannels, profile?.channels]);
 
-  const activeName = profile?.name || user?.name || "Usuario";
-  const activeEmail = profile?.email || user?.email || "Sem email";
+  const isForeignProfileReady = !resolvedUserId || Number(profile?.id ?? 0) === viewedUserId;
+  const shouldShowProfileLoading = loadingProfile || !isForeignProfileReady;
+
+  const activeName = isOwnProfile
+    ? (profile?.name || user?.name || "Usuario")
+    : (profile?.name || "Usuario");
+  const activeEmail = isOwnProfile
+    ? (profile?.email || user?.email || "Sem email")
+    : (profile?.email || "Sem email");
   const activeDescription = String(profile?.description || "");
   const hasDescription = activeDescription.trim().length > 0;
   const avatarSrc = String(
     profile?.avatarUrl ||
     profile?.avatar_url ||
-    (user as any)?.avatarUrl ||
-    (user as any)?.avatar_url ||
+    (isOwnProfile ? (user as any)?.avatarUrl : "") ||
+    (isOwnProfile ? (user as any)?.avatar_url : "") ||
     "",
   ).trim();
   const showAvatarImage = !!avatarSrc && !avatarLoadFailed;
@@ -511,7 +525,9 @@ export default function ChannelsList() {
       <div className="max-w-5xl mx-auto p-6 md:p-10 space-y-8">
         <div className="rounded-2xl border border-border/50 bg-card/80 px-5 py-5 md:px-6 md:py-6 shadow-sm">
           <div className="flex items-center gap-4">
-            {showAvatarImage ? (
+            {shouldShowProfileLoading ? (
+              <div className="h-12 w-12 rounded-xl bg-muted/70 border border-border/50 animate-pulse shrink-0" />
+            ) : showAvatarImage ? (
               <img
                 src={avatarSrc}
                 alt={`Avatar de ${activeName}`}
@@ -524,12 +540,21 @@ export default function ChannelsList() {
               </div>
             )}
             <div className="min-w-0 flex-1">
-              <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground truncate">
-                {activeName}
-              </h1>
-              <p className="text-sm text-muted-foreground truncate">{activeEmail}</p>
+              {shouldShowProfileLoading ? (
+                <div className="space-y-2">
+                  <div className="h-7 w-48 max-w-full rounded bg-muted/70 animate-pulse" />
+                  <div className="h-4 w-56 max-w-full rounded bg-muted/60 animate-pulse" />
+                </div>
+              ) : (
+                <>
+                  <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground truncate">
+                    {activeName}
+                  </h1>
+                  <p className="text-sm text-muted-foreground truncate">{activeEmail}</p>
+                </>
+              )}
 
-              {isOwnProfile ? (
+              {shouldShowProfileLoading ? null : isOwnProfile ? (
                 <div className="mt-2">
                   {isEditingDescription ? (
                     <div className="space-y-2">
@@ -650,7 +675,7 @@ export default function ChannelsList() {
           )}
         </div>
 
-        {isLoading || loadingProfile ? (
+        {isLoading || shouldShowProfileLoading ? (
           <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
         ) : profileError ? (
           <div className="rounded-3xl border border-destructive/30 bg-destructive/5 px-6 py-8 text-center">
