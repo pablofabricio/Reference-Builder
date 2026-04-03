@@ -6,11 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Book, Music, PenTool, Library, MessageSquare, UserRound, BookOpen, Search, ChevronDown, ChevronRight, FileText, Copy, MessageCircle, Plus, X, Trash2, Edit2, Check, Users } from "lucide-react";
+import { Loader2, Book, Music, PenTool, Library, MessageSquare, BookOpen, Search, ChevronDown, ChevronRight, FileText, Copy, MessageCircle, Plus, X, Trash2, Edit2, Check, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { UserAvatar } from "@/components/ui/user-avatar";
+
+type UserSummary = { name: string; avatarUrl?: string };
 
 const typeIcons: Record<string, ReactElement> = {
   BIBLE: <Book className="w-5 h-5" />,
@@ -32,7 +35,7 @@ export default function ChannelDetail() {
   const [expandedRefs, setExpandedRefs] = useState<number[]>([]);
   const [expandedNodeNotes, setExpandedNodeNotes] = useState<number[]>([]);
   const [collapsedNodes, setCollapsedNodes] = useState<number[]>([]);
-  const [usersById, setUsersById] = useState<Record<number, string>>({});
+  const [usersById, setUsersById] = useState<Record<number, UserSummary>>({});
   const [referenceNodesById, setReferenceNodesById] = useState<Record<number, any[]>>({});
   const [loadingNodesById, setLoadingNodesById] = useState<Record<number, boolean>>({});
   const [createdNotes, setCreatedNotes] = useState<any[]>([]);
@@ -97,7 +100,7 @@ export default function ChannelDetail() {
       return normalizedPreferredName;
     }
 
-    const mappedName = typeof usersById[userId] === "string" ? usersById[userId].trim() : "";
+    const mappedName = typeof usersById[userId]?.name === "string" ? usersById[userId].name.trim() : "";
     if (mappedName) {
       return mappedName;
     }
@@ -112,6 +115,20 @@ export default function ChannelDetail() {
     creatorId,
     (channel as any)?.creator?.name ?? (channel as any)?.user?.name ?? null,
   );
+  const getUserAvatarUrl = (userId: number, preferredAvatar?: string | null) => {
+    const normalizedPreferredAvatar = String(preferredAvatar || "").trim();
+    if (normalizedPreferredAvatar) return normalizedPreferredAvatar;
+
+    const mappedAvatar = String(usersById[userId]?.avatarUrl || "").trim();
+    if (mappedAvatar) return mappedAvatar;
+
+    if (userId === Number(user?.id)) {
+      return String((user as any)?.avatar_url || (user as any)?.avatarUrl || "").trim();
+    }
+
+    return "";
+  };
+  const creatorAvatarUrl = getUserAvatarUrl(creatorId, (channel as any)?.creator?.avatar_url ?? (channel as any)?.creator?.avatarUrl ?? (channel as any)?.user?.avatar_url ?? (channel as any)?.user?.avatarUrl ?? null);
 
   useEffect(() => {
     let isMounted = true;
@@ -128,10 +145,13 @@ export default function ChannelDetail() {
             ? payload
             : [];
 
-        const mapped = rows.reduce((acc: Record<number, string>, row: any) => {
+        const mapped = rows.reduce((acc: Record<number, UserSummary>, row: any) => {
           const id = Number(row.id);
           if (!Number.isNaN(id) && typeof row.name === "string") {
-            acc[id] = row.name;
+            acc[id] = {
+              name: row.name,
+              avatarUrl: String(row?.avatar_url || row?.avatarUrl || "").trim() || undefined,
+            };
           }
           return acc;
         }, {});
@@ -1056,7 +1076,12 @@ export default function ChannelDetail() {
                 <div key={note.id} className="rounded-2xl border border-border/50 bg-background/80 backdrop-blur px-3.5 py-3 shadow-sm">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 inline-flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary/70" />
+                      <UserAvatar
+                        name={getNoteAuthor(note)}
+                        src={getUserAvatarUrl(getNoteAuthorId(note), note.user?.avatar_url ?? note.user?.avatarUrl ?? null)}
+                        size="sm"
+                        className="h-7 w-7 text-[10px]"
+                      />
                       {getNoteAuthorId(note) ? (
                         <button
                           type="button"
@@ -1129,7 +1154,7 @@ export default function ChannelDetail() {
         <div className="bg-card rounded-3xl p-8 border border-border/50 shadow-sm">
           <h1 className="text-4xl font-display font-bold mb-3">{channel.name}</h1>
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-            <UserRound className="w-4 h-4" />
+            <UserAvatar name={creatorName} src={creatorAvatarUrl} size="sm" />
             <span>Criador:</span>
             {creatorId > 0 ? (
               <button
@@ -1284,6 +1309,7 @@ export default function ChannelDetail() {
                   (() => {
                 const referenceCreatorId = Number(ref.createdBy ?? ref.created_by ?? creatorId);
                 const referenceCreatorName = getUserDisplayName(referenceCreatorId, ref.user?.name ?? null);
+                const referenceCreatorAvatarUrl = getUserAvatarUrl(referenceCreatorId, ref.user?.avatar_url ?? ref.user?.avatarUrl ?? null);
                 const canEditReference = canChannelActions;
 
                 return (
@@ -1306,7 +1332,7 @@ export default function ChannelDetail() {
                             <p className="mt-1 text-sm font-serif text-muted-foreground transition-colors">{ref.title}</p>
                             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                               <span className="inline-flex items-center gap-1">
-                                <UserRound className="w-3.5 h-3.5" />
+                                <UserAvatar name={referenceCreatorName} src={referenceCreatorAvatarUrl} size="sm" className="h-5 w-5 text-[9px]" />
                                 {referenceCreatorId > 0 ? (
                                   <button
                                     type="button"
@@ -1439,6 +1465,7 @@ export default function ChannelDetail() {
                 {sortedMembers.map((member: any) => {
                   const memberUserId = Number(member.user_id ?? member.userId ?? member.user?.id ?? 0);
                   const memberName = getUserDisplayName(memberUserId, member.user?.name ?? null);
+                  const memberAvatarUrl = getUserAvatarUrl(memberUserId, member.user?.avatar_url ?? member.user?.avatarUrl ?? null);
                   const memberRole = String(member.role || "MEMBER").toUpperCase();
                   const isCurrentUser = memberUserId === Number(user?.id);
                   const isChannelOwnerMember = memberUserId === creatorId;
@@ -1451,11 +1478,16 @@ export default function ChannelDetail() {
                         <div className="flex items-center gap-3 min-w-0">
                           <button
                             type="button"
-                            className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-display font-bold text-base shrink-0"
+                            className="rounded-full shrink-0"
                             onClick={() => setLocation(`/channels/user/${memberUserId}`)}
                             disabled={!memberUserId}
                           >
-                            {(memberName.charAt(0) || "U").toUpperCase()}
+                            <UserAvatar
+                              name={memberName}
+                              src={memberAvatarUrl}
+                              size="lg"
+                              className="h-11 w-11 border-primary/20"
+                            />
                           </button>
                           <div className="min-w-0">
                             <button

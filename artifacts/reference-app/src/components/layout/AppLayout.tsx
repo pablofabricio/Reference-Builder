@@ -13,6 +13,7 @@ import {
   Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -122,9 +123,13 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       <div className="mt-6 flex flex-col items-center gap-3 border-t border-sidebar-border pt-4 w-full">
         <div className="group relative">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground font-display font-bold text-lg border border-border shadow-sm">
-            {user?.name?.charAt(0).toUpperCase() || "U"}
-          </div>
+          <UserAvatar
+            name={user?.name}
+            src={(user as any)?.avatar_url ?? (user as any)?.avatarUrl}
+            size="lg"
+            className="border-border bg-secondary"
+            fallbackClassName="bg-secondary text-secondary-foreground"
+          />
           <div className="pointer-events-none absolute left-[calc(100%+0.75rem)] top-1/2 -translate-y-1/2 min-w-44 rounded-xl border border-border/60 bg-background/95 px-3 py-2 shadow-lg opacity-0 translate-x-2 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0">
             <p className="text-sm font-semibold truncate text-foreground font-sans">{user?.name}</p>
             <p className="text-xs text-muted-foreground truncate font-sans">{user?.email}</p>
@@ -186,9 +191,13 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       <div className="p-4 border-t border-sidebar-border bg-sidebar">
         <div className="flex items-center gap-3 px-4 py-3 mb-2">
-          <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-secondary-foreground font-display font-bold text-lg border border-border">
-            {user?.name?.charAt(0).toUpperCase() || "U"}
-          </div>
+          <UserAvatar
+            name={user?.name}
+            src={(user as any)?.avatar_url ?? (user as any)?.avatarUrl}
+            size="md"
+            className="border-border bg-secondary"
+            fallbackClassName="bg-secondary text-secondary-foreground"
+          />
           <div className="flex-1 overflow-hidden">
             <p className="text-sm font-semibold truncate text-sidebar-foreground font-sans">{user?.name}</p>
             <p className="text-xs text-muted-foreground truncate font-sans">{user?.email}</p>

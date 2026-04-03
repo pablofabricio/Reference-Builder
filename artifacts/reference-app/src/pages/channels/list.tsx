@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { useListChannels, getListChannelsQueryKey } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -6,11 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Users, Plus, UserRound, Pencil, Save } from "lucide-react";
+import { Loader2, Users, Plus, Pencil, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
+import { UserAvatar } from "@/components/ui/user-avatar";
+
+type UserSummary = { name: string; avatarUrl?: string };
 
 type ProfilePayload = {
   id: number;
@@ -46,7 +49,7 @@ export default function ChannelsList() {
 
   const [memberChannelIds, setMemberChannelIds] = useState<number[]>([]);
   const [pendingRequestByChannelId, setPendingRequestByChannelId] = useState<Record<number, number>>({});
-  const [usersById, setUsersById] = useState<Record<number, string>>({});
+  const [usersById, setUsersById] = useState<Record<number, UserSummary>>({});
 
   const [profile, setProfile] = useState<ProfilePayload | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -54,7 +57,9 @@ export default function ChannelsList() {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
@@ -247,10 +252,13 @@ export default function ChannelsList() {
             ? payload
             : [];
 
-        const mapped = rows.reduce((acc: Record<number, string>, row: any) => {
+        const mapped = rows.reduce((acc: Record<number, UserSummary>, row: any) => {
           const id = Number(row.id);
           if (!Number.isNaN(id) && typeof row.name === "string") {
-            acc[id] = row.name;
+            acc[id] = {
+              name: row.name,
+              avatarUrl: String(row?.avatar_url || row?.avatarUrl || "").trim() || undefined,
+            };
           }
           return acc;
         }, {});
@@ -359,6 +367,113 @@ export default function ChannelsList() {
     }
   };
 
+  const triggerAvatarPicker = () => {
+    if (!isOwnProfile || isUploadingAvatar || !user?.id) return;
+    avatarInputRef.current?.click();
+  };
+
+  const handleAvatarFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.currentTarget.value = "";
+    if (!file || !user?.id) return;
+
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      toast({ title: "Formato invalido", description: "Use JPG, PNG ou WEBP.", variant: "destructive" });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Arquivo muito grande", description: "Tamanho maximo: 5MB.", variant: "destructive" });
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      const token = localStorage.getItem("auth_token");
+      const authHeaders = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+      const uploadUrlResponse = await fetch(`/api/users/${user.id}/avatar/upload-url`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(authHeaders || {}),
+        },
+        body: JSON.stringify({ file_name: file.name, content_type: file.type }),
+      });
+
+      if (!uploadUrlResponse.ok) {
+        const errorBody = await uploadUrlResponse.json().catch(() => ({}));
+        throw new Error(errorBody?.message || "Nao foi possivel iniciar upload do avatar");
+      }
+
+      const uploadPayload = await uploadUrlResponse.json();
+      const uploadUrl = String(uploadPayload?.upload_url || "");
+      const key = String(uploadPayload?.key || "");
+      const signedHeaders = (uploadPayload?.headers ?? {}) as Record<string, string>;
+      const uploadHeaders = Object.entries(signedHeaders).reduce<Record<string, string>>((acc, [name, value]) => {
+        if (name.toLowerCase() === "host") {
+          return acc;
+        }
+
+        const normalizedValue = Array.isArray(value) ? value[0] : value;
+        if (typeof normalizedValue === "string" && normalizedValue.trim()) {
+          acc[name] = normalizedValue;
+        }
+
+        return acc;
+      }, {});
+
+      if (!uploadUrl || !key) {
+        throw new Error("Resposta de upload invalida");
+      }
+
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type,
+          ...uploadHeaders,
+        },
+        body: file,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("Falha no upload do arquivo");
+      }
+
+      const saveAvatarResponse = await fetch(`/api/users/${user.id}/avatar`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(authHeaders || {}),
+        },
+        body: JSON.stringify({ key }),
+      });
+
+      if (!saveAvatarResponse.ok) {
+        const errorBody = await saveAvatarResponse.json().catch(() => ({}));
+        throw new Error(errorBody?.message || "Nao foi possivel salvar avatar");
+      }
+
+      const payload = await saveAvatarResponse.json().catch(() => ({}));
+      const refreshedUser = payload?.data ?? payload;
+      const nextAvatar = String(refreshedUser?.avatar_url || refreshedUser?.avatarUrl || uploadPayload?.public_url || "").trim();
+
+      setProfile((prev) => ({
+        ...(prev || { id: Number(user.id) }),
+        avatar_url: nextAvatar,
+        avatarUrl: nextAvatar,
+      }));
+      window.dispatchEvent(new CustomEvent("user-profile-updated", { detail: { avatar_url: nextAvatar, avatarUrl: nextAvatar } }));
+      setAvatarLoadFailed(false);
+      toast({ title: "Avatar atualizado" });
+    } catch (error: any) {
+      toast({ title: "Erro ao enviar avatar", description: error?.message || "Erro inesperado", variant: "destructive" });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
   const getCreatorId = (channel: any) => Number(channel.createdBy ?? channel.created_by ?? 0);
 
   const ownChannels = useMemo(
@@ -407,7 +522,8 @@ export default function ChannelsList() {
   const renderChannelCard = (channel: any) => {
     const memberCount = Number((channel as any).memberCount ?? (channel as any).members?.length ?? 0);
     const creatorId = getCreatorId(channel);
-    const creatorName = usersById[creatorId] || (creatorId === Number(user?.id) ? "Voce" : `Usuario ${creatorId}`);
+    const creatorName = usersById[creatorId]?.name || (creatorId === Number(user?.id) ? "Voce" : `Usuario ${creatorId}`);
+    const creatorAvatar = usersById[creatorId]?.avatarUrl || (creatorId === Number(user?.id) ? String((user as any)?.avatar_url || (user as any)?.avatarUrl || "") : "");
     const channelId = Number(channel.id);
     const channelVisibility = String(channel.visibility || "PRIVATE").toUpperCase();
     const isOwnChannel = creatorId === Number(user?.id);
@@ -437,7 +553,7 @@ export default function ChannelsList() {
       >
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-            <UserRound className="w-4 h-4" />
+            <UserAvatar name={creatorName} src={creatorAvatar} size="sm" />
             <span>{creatorName}</span>
           </div>
           <CardTitle className={`font-display text-xl line-clamp-1 transition-colors ${canOpenChannel ? "group-hover:text-primary" : ""}`}>
@@ -525,19 +641,51 @@ export default function ChannelsList() {
       <div className="max-w-5xl mx-auto p-6 md:p-10 space-y-8">
         <div className="rounded-2xl border border-border/50 bg-card/80 px-5 py-5 md:px-6 md:py-6 shadow-sm">
           <div className="flex items-center gap-4">
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleAvatarFileChange}
+            />
             {shouldShowProfileLoading ? (
-              <div className="h-12 w-12 rounded-xl bg-muted/70 border border-border/50 animate-pulse shrink-0" />
+              <div className="h-12 w-12 rounded-full bg-muted/70 border border-border/50 animate-pulse shrink-0" />
             ) : showAvatarImage ? (
-              <img
-                src={avatarSrc}
-                alt={`Avatar de ${activeName}`}
-                className="h-12 w-12 rounded-xl border border-primary/20 object-cover shrink-0"
-                onError={() => setAvatarLoadFailed(true)}
-              />
+              <button
+                type="button"
+                onClick={triggerAvatarPicker}
+                disabled={!isOwnProfile || isUploadingAvatar}
+                className={`relative rounded-full ${isOwnProfile ? "cursor-pointer" : "cursor-default"} disabled:opacity-70`}
+                title={isOwnProfile ? "Alterar avatar" : undefined}
+              >
+                <UserAvatar
+                  name={activeName}
+                  src={avatarSrc}
+                  size="lg"
+                  className="border-primary/20"
+                />
+                {isOwnProfile && isUploadingAvatar ? (
+                  <span className="absolute inset-0 rounded-full bg-background/60 flex items-center justify-center">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  </span>
+                ) : null}
+              </button>
             ) : (
-              <div className="h-12 w-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-display font-bold text-lg shrink-0">
-                {activeName?.charAt(0).toUpperCase() || "U"}
-              </div>
+              <button
+                type="button"
+                onClick={triggerAvatarPicker}
+                disabled={!isOwnProfile || isUploadingAvatar}
+                className={`${isOwnProfile ? "cursor-pointer" : "cursor-default"} rounded-full disabled:opacity-70`}
+                title={isOwnProfile ? "Alterar avatar" : undefined}
+              >
+                {isUploadingAvatar ? (
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full border border-primary/20 bg-background/60">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  </span>
+                ) : (
+                  <UserAvatar name={activeName} size="lg" className="border-primary/20" />
+                )}
+              </button>
             )}
             <div className="min-w-0 flex-1">
               {shouldShowProfileLoading ? (

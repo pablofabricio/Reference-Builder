@@ -4,7 +4,10 @@ import { useListChannels, useListReferences } from "@workspace/api-client-react"
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Library, UserRound } from "lucide-react";
+import { Loader2, Library } from "lucide-react";
+import { UserAvatar } from "@/components/ui/user-avatar";
+
+type UserSummary = { name: string; avatarUrl?: string };
 
 export default function ReferencesList() {
   const [, setLocation] = useLocation();
@@ -13,7 +16,7 @@ export default function ReferencesList() {
   const { data: channels, isLoading: loadingChannels } = useListChannels();
   const [channelReferenceLinks, setChannelReferenceLinks] = useState<any[]>([]);
   const [memberChannelIds, setMemberChannelIds] = useState<number[]>([]);
-  const [usersById, setUsersById] = useState<Record<number, string>>({});
+  const [usersById, setUsersById] = useState<Record<number, UserSummary>>({});
   const [loadingLinks, setLoadingLinks] = useState(true);
   const [loadingMemberships, setLoadingMemberships] = useState(true);
 
@@ -103,10 +106,13 @@ export default function ReferencesList() {
             ? payload
             : [];
 
-        const mapped = rows.reduce((acc: Record<number, string>, row: any) => {
+        const mapped = rows.reduce((acc: Record<number, UserSummary>, row: any) => {
           const id = Number(row.id);
           if (!Number.isNaN(id) && typeof row.name === "string") {
-            acc[id] = row.name;
+            acc[id] = {
+              name: row.name,
+              avatarUrl: String(row?.avatar_url || row?.avatarUrl || "").trim() || undefined,
+            };
           }
           return acc;
         }, {});
@@ -270,8 +276,12 @@ export default function ReferencesList() {
                               </CardHeader>
                               <CardContent className="pt-0">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                  <UserRound className="w-4 h-4" />
-                                  <span>{usersById[section.creatorId] || `Usuario ${section.creatorId || "desconhecido"}`}</span>
+                                  <UserAvatar
+                                    name={usersById[section.creatorId]?.name || `Usuario ${section.creatorId || "desconhecido"}`}
+                                    src={usersById[section.creatorId]?.avatarUrl}
+                                    size="sm"
+                                  />
+                                  <span>{usersById[section.creatorId]?.name || `Usuario ${section.creatorId || "desconhecido"}`}</span>
                                 </div>
                               </CardContent>
                             </Card>
@@ -300,8 +310,12 @@ export default function ReferencesList() {
                               </CardHeader>
                               <CardContent className="pt-0">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                  <UserRound className="w-4 h-4" />
-                                  <span>{usersById[section.creatorId] || `Usuario ${section.creatorId || "desconhecido"}`}</span>
+                                  <UserAvatar
+                                    name={usersById[section.creatorId]?.name || `Usuario ${section.creatorId || "desconhecido"}`}
+                                    src={usersById[section.creatorId]?.avatarUrl}
+                                    size="sm"
+                                  />
+                                  <span>{usersById[section.creatorId]?.name || `Usuario ${section.creatorId || "desconhecido"}`}</span>
                                 </div>
                               </CardContent>
                             </Card>
@@ -330,8 +344,12 @@ export default function ReferencesList() {
                               </CardHeader>
                               <CardContent className="pt-0">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                  <UserRound className="w-4 h-4" />
-                                  <span>{usersById[section.creatorId] || `Usuario ${section.creatorId || "desconhecido"}`}</span>
+                                  <UserAvatar
+                                    name={usersById[section.creatorId]?.name || `Usuario ${section.creatorId || "desconhecido"}`}
+                                    src={usersById[section.creatorId]?.avatarUrl}
+                                    size="sm"
+                                  />
+                                  <span>{usersById[section.creatorId]?.name || `Usuario ${section.creatorId || "desconhecido"}`}</span>
                                 </div>
                               </CardContent>
                             </Card>

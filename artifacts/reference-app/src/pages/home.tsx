@@ -6,6 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, BookOpen } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { UserAvatar } from "@/components/ui/user-avatar";
+
+type UserSummary = { name: string; avatarUrl?: string };
 
 export default function Home() {
   const { user } = useAuth();
@@ -15,7 +18,7 @@ export default function Home() {
   const { data: references, isLoading: loadingReferences } = useListReferences();
   const [channelReferenceLinks, setChannelReferenceLinks] = useState<any[]>([]);
   const [referenceNodesById, setReferenceNodesById] = useState<Record<number, { referenceId: number; label: string; content: string }>>({});
-  const [usersById, setUsersById] = useState<Record<number, string>>({});
+  const [usersById, setUsersById] = useState<Record<number, UserSummary>>({});
   const [memberChannelIds, setMemberChannelIds] = useState<number[]>([]);
   const [loadingChannelReferenceLinks, setLoadingChannelReferenceLinks] = useState(true);
   const [loadingReferenceNodes, setLoadingReferenceNodes] = useState(true);
@@ -115,11 +118,14 @@ export default function Home() {
             ? payload
             : [];
 
-        const mapped = rows.reduce((acc: Record<number, string>, row: any) => {
+        const mapped = rows.reduce((acc: Record<number, UserSummary>, row: any) => {
           const id = Number(row?.id ?? 0);
           const name = String(row?.name || "").trim();
           if (id > 0 && name) {
-            acc[id] = name;
+            acc[id] = {
+              name,
+              avatarUrl: String(row?.avatar_url || row?.avatarUrl || "").trim() || undefined,
+            };
           }
           return acc;
         }, {});
@@ -324,7 +330,8 @@ export default function Home() {
           <div className="space-y-5">
             {feedNotes.map((note: any) => {
               const authorId = Number(note?.user?.id ?? note?.userId ?? note?.user_id ?? 0);
-              const authorName = String(note?.user?.name || usersById[authorId] || `Usuario ${authorId || "desconhecido"}`).trim();
+              const authorName = String(note?.user?.name || usersById[authorId]?.name || `Usuario ${authorId || "desconhecido"}`).trim();
+              const authorAvatar = String(note?.user?.avatar_url || note?.user?.avatarUrl || usersById[authorId]?.avatarUrl || "").trim();
               const createdAt = note?.createdAt || note?.created_at;
               const channelId = Number(note?.channelId ?? note?.channel_id ?? 0);
               const noteNodeId = Number(note?.referenceNodeId ?? note?.reference_node_id ?? 0);
@@ -367,9 +374,7 @@ export default function Home() {
                 <Card key={note.id} className="rounded-2xl border-border/50 shadow-sm">
                   <CardHeader className="pb-3 space-y-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-display font-bold text-secondary-foreground border border-border">
-                        {(authorName.charAt(0) || "U").toUpperCase()}
-                      </div>
+                      <UserAvatar name={authorName} src={authorAvatar} />
                       <div>
                         {authorId > 0 ? (
                           <Link href={`/channels/user/${authorId}`}>

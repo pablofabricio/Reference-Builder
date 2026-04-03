@@ -8,6 +8,9 @@ import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { UserAvatar } from "@/components/ui/user-avatar";
+
+type UserSummary = { name: string; avatarUrl?: string };
 
 const getNodeParentId = (node: ReferenceNode | any) => node.parentNodeId ?? node.parent_node_id ?? null;
 const getNodePosition = (node: ReferenceNode | any) => Number(node.position ?? 0);
@@ -159,7 +162,7 @@ export default function ReferenceDetail() {
   const [savingNoteInline, setSavingNoteInline] = useState(false);
   const [inlineNoteDraft, setInlineNoteDraft] = useState("");
   const [isCreatingNoteCard, setIsCreatingNoteCard] = useState(false);
-  const [usersById, setUsersById] = useState<Record<number, string>>({});
+  const [usersById, setUsersById] = useState<Record<number, UserSummary>>({});
   const [myChannelRole, setMyChannelRole] = useState<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
   const [editingNodeSnapshot, setEditingNodeSnapshot] = useState<any | null>(null);
@@ -278,10 +281,13 @@ export default function ReferenceDetail() {
             ? payload
             : [];
 
-        const mapped = rows.reduce((acc: Record<number, string>, row: any) => {
+        const mapped = rows.reduce((acc: Record<number, UserSummary>, row: any) => {
           const userId = Number(row.id);
           if (!Number.isNaN(userId) && typeof row.name === "string") {
-            acc[userId] = row.name;
+            acc[userId] = {
+              name: row.name,
+              avatarUrl: String(row?.avatar_url || row?.avatarUrl || "").trim() || undefined,
+            };
           }
           return acc;
         }, {});
@@ -574,7 +580,7 @@ export default function ReferenceDetail() {
     if (nestedName) return nestedName;
 
     const authorId = Number(note?.userId ?? note?.user_id ?? note?.user?.id ?? 0);
-    const mapped = String(usersById[authorId] || "").trim();
+    const mapped = String(usersById[authorId]?.name || "").trim();
     if (mapped) return mapped;
 
     if (authorId === Number(user?.id ?? 0) && String(user?.name || "").trim()) {
@@ -582,6 +588,18 @@ export default function ReferenceDetail() {
     }
 
     return authorId > 0 ? `User ${authorId}` : "Autor nao informado";
+  };
+
+  const getNoteAuthorAvatar = (note: any) => {
+    const authorId = Number(note?.userId ?? note?.user_id ?? note?.user?.id ?? 0);
+
+    return String(
+      note?.user?.avatar_url ||
+      note?.user?.avatarUrl ||
+      usersById[authorId]?.avatarUrl ||
+      (authorId === Number(user?.id ?? 0) ? ((user as any)?.avatar_url || (user as any)?.avatarUrl || "") : "") ||
+      "",
+    ).trim();
   };
 
   const getNoteAuthorId = (note: any) => Number(note?.user?.id ?? note?.userId ?? note?.user_id ?? 0);
@@ -1334,6 +1352,7 @@ export default function ReferenceDetail() {
                             const isEditingThisNote = editingNoteId === noteId;
                             const authorName = getNoteAuthorName(note);
                             const authorId = getNoteAuthorId(note);
+                            const authorAvatar = getNoteAuthorAvatar(note);
                             const createdAt = (note as any).createdAt || (note as any).created_at;
                             return (
                           <div
@@ -1404,6 +1423,7 @@ export default function ReferenceDetail() {
                             </div>
 
                             <div className="mt-4 pt-4 border-t border-border/50 text-xs text-muted-foreground flex items-center gap-2">
+                              <UserAvatar name={authorName} src={authorAvatar} size="sm" className="h-6 w-6 text-[10px]" />
                               {authorId ? (
                                 <Link href={`/channels/user/${authorId}`}>
                                   <span className="hover:text-primary transition-colors">{authorName}</span>

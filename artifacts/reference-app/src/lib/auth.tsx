@@ -67,6 +67,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [token, queryClient]);
 
+  useEffect(() => {
+    const handleUserProfileUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<Partial<User>>).detail;
+      if (!detail) return;
+
+      setUser((previous) => {
+        if (!previous) return previous;
+        const nextUser = { ...previous, ...detail } as User;
+        queryClient.setQueryData(getGetMeQueryKey(), nextUser);
+        return nextUser;
+      });
+    };
+
+    window.addEventListener("user-profile-updated", handleUserProfileUpdated as EventListener);
+
+    return () => {
+      window.removeEventListener("user-profile-updated", handleUserProfileUpdated as EventListener);
+    };
+  }, [queryClient]);
+
   const login = (newToken: string, newUser: User) => {
     localStorage.setItem("auth_token", newToken);
     setToken(newToken);

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Users, Check, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 type JoinRequest = {
   id: number;
@@ -25,11 +26,20 @@ type JoinRequest = {
     id: number;
     name?: string;
     email?: string;
+    avatar_url?: string;
+    avatarUrl?: string;
   } | null;
   reviewer?: {
     id: number;
     name?: string;
+    avatar_url?: string;
+    avatarUrl?: string;
   } | null;
+};
+
+type UserSummary = {
+  name?: string;
+  avatarUrl?: string;
 };
 
 export default function RequestsPage() {
@@ -37,6 +47,7 @@ export default function RequestsPage() {
   const { toast } = useToast();
   const [location, setLocation] = useLocation();
   const [requests, setRequests] = useState<JoinRequest[]>([]);
+  const [usersById, setUsersById] = useState<Record<number, UserSummary>>({});
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"incoming" | "outgoing">(() => {
@@ -51,6 +62,49 @@ export default function RequestsPage() {
       : null;
     setActiveTab(tab === "outgoing" ? "outgoing" : "incoming");
   }, [location]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadUsers = async () => {
+      try {
+        const response = await fetch("/api/users");
+        if (!response.ok) return;
+
+        const payload = await response.json();
+        const rows = Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload)
+            ? payload
+            : [];
+
+        const mapped = rows.reduce((acc: Record<number, UserSummary>, row: any) => {
+          const id = Number(row?.id ?? 0);
+          if (id > 0) {
+            acc[id] = {
+              name: typeof row?.name === "string" ? row.name : undefined,
+              avatarUrl: String(row?.avatar_url || row?.avatarUrl || "").trim() || undefined,
+            };
+          }
+          return acc;
+        }, {});
+
+        if (isMounted) {
+          setUsersById(mapped);
+        }
+      } catch {
+        if (isMounted) {
+          setUsersById({});
+        }
+      }
+    };
+
+    loadUsers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -159,7 +213,16 @@ export default function RequestsPage() {
   const renderRequestCard = (request: JoinRequest, canReview: boolean) => {
     const status = String(request.status || "PENDING").toUpperCase();
     const channelName = String(request.channel?.name || `Canal ${request.channel_id}`);
-    const requesterName = String(request.requester?.name || `Usuario ${request.requester_id}`);
+    const requesterName = String(request.requester?.name || usersById[request.requester_id]?.name || `Usuario ${request.requester_id}`);
+    const requesterAvatar = String(
+      request.requester?.avatar_url ||
+      request.requester?.avatarUrl ||
+      usersById[request.requester_id]?.avatarUrl ||
+      (Number(request.requester_id) === Number(user?.id)
+        ? ((user as any)?.avatar_url || (user as any)?.avatarUrl || "")
+        : "") ||
+      "",
+    ).trim();
     const createdAt = request.created_at ? new Date(request.created_at).toLocaleString("pt-BR") : null;
     const statusTone = status === "APPROVED"
       ? "bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -171,7 +234,14 @@ export default function RequestsPage() {
       <Card key={request.id} className="rounded-2xl border-border/50 shadow-sm">
         <CardHeader className="px-5 pt-5 pb-2">
           <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 space-y-2">
+            <div className="min-w-0 flex items-start gap-3">
+              <UserAvatar
+                name={requesterName}
+                src={requesterAvatar}
+                size="md"
+                className="mt-0.5"
+              />
+              <div className="min-w-0 space-y-2">
               <button
                 type="button"
                 className="block w-full text-left font-display text-xl leading-tight text-foreground hover:text-primary transition-colors truncate"
@@ -186,6 +256,7 @@ export default function RequestsPage() {
               >
                 {requesterName}
               </button>
+              </div>
             </div>
             <span className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${statusTone}`}>
               {status}
