@@ -12,6 +12,14 @@ const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)
 const originalFetch = window.fetch;
 window.fetch = async (...args) => {
   let [resource, config] = args;
+
+  const toHeaders = (headersInit?: HeadersInit): Headers => {
+    try {
+      return new Headers(headersInit);
+    } catch {
+      return new Headers();
+    }
+  };
   
   if (typeof resource === 'string' && resource.startsWith('/api')) {
     const method = (config?.method || 'GET').toUpperCase();
@@ -94,8 +102,14 @@ window.fetch = async (...args) => {
     if (typeof config?.body === 'string' && config.body.trim().startsWith('{')) {
       try {
         const parsed = JSON.parse(config.body);
+        const headers = toHeaders(config?.headers);
+        if (!headers.has('Content-Type')) {
+          headers.set('Content-Type', 'application/json');
+        }
+
         config = {
           ...config,
+          headers,
           body: JSON.stringify(rewriteJsonBody(parsed)),
         };
       } catch {
@@ -110,10 +124,9 @@ window.fetch = async (...args) => {
     const token = localStorage.getItem('auth_token');
     if (token) {
       config = config || {};
-      config.headers = {
-        ...config.headers,
-        Authorization: `Bearer ${token}`
-      };
+      const headers = toHeaders(config.headers);
+      headers.set('Authorization', `Bearer ${token}`);
+      config.headers = headers;
     }
   }
   

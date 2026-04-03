@@ -10,7 +10,8 @@ import {
   X,
   Compass,
   UserCircle2,
-  Users
+  Users,
+  FilePlus2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/user-avatar";
@@ -72,6 +73,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navItems = [
     { href: "/home", label: "Dashboard", icon: Home },
     { href: "/references", label: "Library", icon: BookOpen },
+    { href: "/references/new", label: "Add Ref", icon: FilePlus2 },
     { href: "/requests", label: "Solicitacoes", icon: Users, badge: pendingRequestsCount },
     { href: "/channels", label: "Profile", icon: UserCircle2 },
   ];

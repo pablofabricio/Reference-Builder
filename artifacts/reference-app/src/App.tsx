@@ -11,6 +11,7 @@ import Register from "@/pages/register";
 import Home from "@/pages/home";
 import ReferencesList from "@/pages/references/list";
 import ReferenceDetail from "@/pages/references/detail";
+import ReferenceCreate from "@/pages/references/create";
 import NoteForm from "@/pages/notes/form";
 import ChannelsList from "@/pages/channels/list";
 import ChannelDetail from "@/pages/channels/detail";
@@ -55,6 +56,7 @@ function Router() {
       <Route path="/home" component={(props) => <ProtectedRoute component={Home} {...props} />} />
       
       <Route path="/references" component={(props) => <ProtectedRoute component={ReferencesList} {...props} />} />
+      <Route path="/references/new" component={(props) => <ProtectedRoute component={ReferenceCreate} {...props} />} />
       <Route path="/references/:id" component={(props) => <ProtectedRoute component={ReferenceDetail} {...props} />} />
       
       <Route path="/notes">
