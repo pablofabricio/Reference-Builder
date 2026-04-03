@@ -27,8 +27,8 @@ export default function Login() {
 
         if (!token) {
           toast({
-            title: "Login failed",
-            description: "Token nao retornado pela API.",
+            title: "Falha no login",
+            description: "Token não retornado pela API.",
             variant: "destructive"
           });
           return;
@@ -44,8 +44,8 @@ export default function Login() {
 
           if (!meResponse.ok) {
             toast({
-              title: "Login failed",
-              description: "Nao foi possivel carregar o perfil do usuario.",
+              title: "Falha no login",
+              description: "Não foi possível carregar o perfil do usuário.",
               variant: "destructive"
             });
             return;
@@ -56,7 +56,7 @@ export default function Login() {
         }
 
         login(token, user);
-        toast({ title: "Welcome back", description: "Successfully logged in." });
+        toast({ title: "Bem-vindo de volta", description: "Login realizado com sucesso." });
         const nextPath = typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("next")
           : null;
@@ -65,8 +65,8 @@ export default function Login() {
       },
       onError: (error: any) => {
         toast({ 
-          title: "Login failed", 
-          description: error?.response?.data?.error || "Invalid credentials",
+          title: "Falha no login", 
+          description: error?.response?.data?.error || "Credenciais inválidas",
           variant: "destructive" 
         });
       }
@@ -85,14 +85,14 @@ export default function Login() {
             <Link href="/" className="inline-flex items-center gap-2 text-primary mb-8 hover:opacity-80 transition-opacity">
               <Compass className="w-8 h-8" />
             </Link>
-            <h2 className="text-3xl font-display font-bold text-foreground mb-2">Welcome back</h2>
-            <p className="text-muted-foreground font-serif text-lg">Enter your details to continue reading.</p>
+            <h2 className="text-3xl font-display font-bold text-foreground mb-2">Bem-vindo de volta</h2>
+            <p className="text-muted-foreground font-serif text-lg">Informe seus dados para continuar lendo.</p>
           </div>
 
           <div className="bg-card p-8 rounded-2xl shadow-xl shadow-black/5 border border-border/50">
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="email">E-mail</Label>
                 <Input 
                   id="email" 
                   type="email" 
@@ -105,7 +105,7 @@ export default function Login() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">Senha</Label>
                 <Input 
                   id="password" 
                   type="password" 
@@ -121,15 +121,15 @@ export default function Login() {
                 className="w-full h-12 rounded-xl text-base bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20"
                 disabled={loginMutation.isPending}
               >
-                {loginMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Sign in"}
+                {loginMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Entrar"}
               </Button>
             </form>
           </div>
 
           <div className="mt-8 text-center text-sm text-muted-foreground">
-            Don't have an account?{" "}
+            Não tem uma conta?{" "}
             <Link href="/register" className="font-medium text-primary hover:underline">
-              Create one now
+              Crie agora
             </Link>
           </div>
         </motion.div>
@@ -141,7 +141,7 @@ export default function Login() {
         <div className="absolute inset-0 flex items-center justify-center p-24">
           <blockquote className="max-w-md text-center">
             <p className="text-3xl font-display italic text-foreground leading-relaxed">
-              "The reading of all good books is like conversation with the finest men of past centuries."
+              "A leitura de todos os bons livros é como conversar com os melhores homens dos séculos passados."
             </p>
             <footer className="mt-6 font-serif text-muted-foreground text-lg">— Descartes</footer>
           </blockquote>

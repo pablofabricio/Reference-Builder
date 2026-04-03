@@ -127,7 +127,7 @@ export default function ChannelsList() {
             setAvatarLoadFailed(false);
           } else {
             setProfile(null);
-            setProfileError("Nao foi possivel carregar este perfil agora.");
+            setProfileError("Não foi possível carregar este perfil agora.");
           }
         }
       } finally {
@@ -300,7 +300,7 @@ export default function ChannelsList() {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody?.message || "Nao foi possivel criar channel");
+        throw new Error(errorBody?.message || "Não foi possível criar channel");
       }
 
       queryClient.invalidateQueries({ queryKey: getListChannelsQueryKey() });
@@ -331,7 +331,7 @@ export default function ChannelsList() {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody?.message || "Nao foi possivel atualizar perfil");
+        throw new Error(errorBody?.message || "Não foi possível atualizar perfil");
       }
 
       const payload = await response.json();
@@ -359,7 +359,7 @@ export default function ChannelsList() {
       }
 
       setIsEditingDescription(false);
-      toast({ title: "Descricao atualizada" });
+      toast({ title: "Descrição atualizada" });
     } catch (error: any) {
       toast({ title: "Erro ao atualizar perfil", description: error?.message || "Erro inesperado", variant: "destructive" });
     } finally {
@@ -379,7 +379,7 @@ export default function ChannelsList() {
 
     const allowed = ["image/jpeg", "image/png", "image/webp"];
     if (!allowed.includes(file.type)) {
-      toast({ title: "Formato invalido", description: "Use JPG, PNG ou WEBP.", variant: "destructive" });
+      toast({ title: "Formato inválido", description: "Use JPG, PNG ou WEBP.", variant: "destructive" });
       return;
     }
 
@@ -404,7 +404,7 @@ export default function ChannelsList() {
 
       if (!uploadUrlResponse.ok) {
         const errorBody = await uploadUrlResponse.json().catch(() => ({}));
-        throw new Error(errorBody?.message || "Nao foi possivel iniciar upload do avatar");
+        throw new Error(errorBody?.message || "Não foi possível iniciar upload do avatar");
       }
 
       const uploadPayload = await uploadUrlResponse.json();
@@ -452,7 +452,7 @@ export default function ChannelsList() {
 
       if (!saveAvatarResponse.ok) {
         const errorBody = await saveAvatarResponse.json().catch(() => ({}));
-        throw new Error(errorBody?.message || "Nao foi possivel salvar avatar");
+        throw new Error(errorBody?.message || "Não foi possível salvar avatar");
       }
 
       const payload = await saveAvatarResponse.json().catch(() => ({}));
@@ -503,8 +503,8 @@ export default function ChannelsList() {
   const shouldShowProfileLoading = loadingProfile || !isForeignProfileReady;
 
   const activeName = isOwnProfile
-    ? (profile?.name || user?.name || "Usuario")
-    : (profile?.name || "Usuario");
+    ? (profile?.name || user?.name || "Usuário")
+    : (profile?.name || "Usuário");
   const activeEmail = isOwnProfile
     ? (profile?.email || user?.email || "Sem email")
     : (profile?.email || "Sem email");
@@ -522,7 +522,7 @@ export default function ChannelsList() {
   const renderChannelCard = (channel: any) => {
     const memberCount = Number((channel as any).memberCount ?? (channel as any).members?.length ?? 0);
     const creatorId = getCreatorId(channel);
-    const creatorName = usersById[creatorId]?.name || (creatorId === Number(user?.id) ? "Voce" : `Usuario ${creatorId}`);
+    const creatorName = usersById[creatorId]?.name || (creatorId === Number(user?.id) ? "Você" : `Usuário ${creatorId}`);
     const creatorAvatar = usersById[creatorId]?.avatarUrl || (creatorId === Number(user?.id) ? String((user as any)?.avatar_url || (user as any)?.avatarUrl || "") : "");
     const channelId = Number(channel.id);
     const channelVisibility = String(channel.visibility || "PRIVATE").toUpperCase();
@@ -591,7 +591,7 @@ export default function ChannelsList() {
 
                       if (!response.ok) {
                         const errorBody = await response.json().catch(() => ({}));
-                        throw new Error(errorBody?.message || "Nao foi possivel cancelar solicitacao");
+                        throw new Error(errorBody?.message || "Não foi possível cancelar solicitação");
                       }
 
                       setPendingRequestByChannelId((prev) => {
@@ -600,7 +600,7 @@ export default function ChannelsList() {
                         return next;
                       });
                       window.dispatchEvent(new Event("channel-requests-changed"));
-                      toast({ title: "Solicitacao cancelada" });
+                      toast({ title: "Solicitação cancelada" });
                     } else {
                       const response = await fetch(`/api/channels/${channelId}/join`, {
                         method: "POST",
@@ -608,7 +608,7 @@ export default function ChannelsList() {
 
                       if (!response.ok) {
                         const errorBody = await response.json().catch(() => ({}));
-                        throw new Error(errorBody?.message || "Nao foi possivel solicitar entrada");
+                        throw new Error(errorBody?.message || "Não foi possível solicitar entrada");
                       }
 
                       const payload = await response.json().catch(() => ({}));
@@ -617,11 +617,11 @@ export default function ChannelsList() {
                         setPendingRequestByChannelId((prev) => ({ ...prev, [channelId]: requestId }));
                       }
                       window.dispatchEvent(new Event("channel-requests-changed"));
-                      toast({ title: "Solicitacao enviada" });
+                      toast({ title: "Solicitação enviada" });
                       setLocation("/requests?tab=outgoing");
                     }
                   } catch (error: any) {
-                    toast({ title: error?.message || "Erro ao atualizar solicitacao", variant: "destructive" });
+                    toast({ title: error?.message || "Erro ao atualizar solicitação", variant: "destructive" });
                   } finally {
                     setRequestingChannelId(null);
                   }
@@ -709,7 +709,7 @@ export default function ChannelsList() {
                       <textarea
                         value={descriptionDraft}
                         onChange={(e) => setDescriptionDraft(e.target.value)}
-                        placeholder="Escreva uma descricao sobre voce"
+                        placeholder="Escreva uma descrição sobre você"
                         className="w-full rounded-xl bg-background border border-border/50 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none h-24 font-sans"
                       />
                       <div className="flex items-center gap-2">
@@ -751,8 +751,8 @@ export default function ChannelsList() {
                         type="button"
                         onClick={() => setIsEditingDescription(true)}
                         className="mt-2 inline-flex items-center text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label="Editar descricao"
-                        title="Editar descricao"
+                        aria-label="Editar descrição"
+                        title="Editar descrição"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
@@ -831,7 +831,7 @@ export default function ChannelsList() {
           </div>
         ) : profileChannels.length === 0 ? (
           <div className="text-center py-20 text-muted-foreground font-serif text-lg">
-            {isOwnProfile ? "Nenhum canal encontrado para voce." : "Nenhum channel publico desse usuario."}
+            {isOwnProfile ? "Nenhum canal encontrado para você." : "Nenhum channel público desse usuário."}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

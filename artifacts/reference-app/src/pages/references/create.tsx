@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, Loader2, Plus, Trash2 } from "lucide-react";
+import { Bold, ChevronDown, ChevronRight, Italic, List, Loader2, MessageSquareQuote, Plus, Trash2, Underline } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type DraftBlock = {
@@ -29,6 +29,8 @@ type DraftBlock = {
   content: string;
   position: number;
 };
+
+type NodeFormat = "bold" | "italic" | "underline" | "quote" | "list";
 
 const createId = () =>
   `b_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -41,6 +43,95 @@ const createEmptyBlock = (parentId: string | null, position: number): DraftBlock
   content: "",
   position,
 });
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const sanitizeHtml = (raw: string) =>
+  raw
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
+    .replace(/\son\w+=\"[^\"]*\"/gi, "")
+    .replace(/\son\w+=\'[^\']*\'/gi, "")
+    .replace(/javascript:/gi, "");
+
+const renderInlineFormatting = (raw: string) => {
+  const escaped = escapeHtml(raw);
+  return escaped
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>")
+    .replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/g, "<u>$1</u>");
+};
+
+const renderFormattedContent = (raw: string) => {
+  if (/<\/?[a-z][\s\S]*>/i.test(raw)) {
+    return sanitizeHtml(raw);
+  }
+
+  const lines = raw.split("\n");
+  const chunks: string[] = [];
+  let listBuffer: string[] = [];
+
+  const flushList = () => {
+    if (listBuffer.length === 0) {
+      return;
+    }
+
+    chunks.push(`<ul>${listBuffer.join("")}</ul>`);
+    listBuffer = [];
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("- ")) {
+      const item = trimmed.slice(2);
+      listBuffer.push(`<li>${renderInlineFormatting(item)}</li>`);
+      return;
+    }
+
+    flushList();
+
+    if (!trimmed) {
+      chunks.push("<p><br /></p>");
+      return;
+    }
+
+    if (trimmed.startsWith("> ")) {
+      chunks.push(`<blockquote>${renderInlineFormatting(trimmed.slice(2))}</blockquote>`);
+      return;
+    }
+
+    chunks.push(`<p>${renderInlineFormatting(line)}</p>`);
+  });
+
+  flushList();
+
+  return chunks.join("");
+};
+
+const stripFormatting = (raw: string) =>
+  /<\/?[a-z][\s\S]*>/i.test(raw)
+    ? raw
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/\s+/g, " ")
+      .trim()
+    : raw
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1$2")
+      .replace(/<u>([\s\S]*?)<\/u>/g, "$1")
+      .replace(/^\s*[-*]\s+/gm, "")
+      .replace(/^\s*>\s?/gm, "")
+      .trim();
 
 const getNodePosition = (node: any) => Number(node?.position ?? 0);
 
@@ -61,7 +152,7 @@ function TreeNode({ node, blocks, selectedId, onSelect, expandedById, onToggleEx
     .sort((left, right) => left.position - right.position);
   const hasChildren = children.length > 0;
   const nodeLabel = node.label.trim();
-  const nodeContent = node.content.trim();
+  const nodeContent = stripFormatting(node.content);
   const previewContent = nodeContent ? `${nodeContent.slice(0, 26)}...` : "...";
   const treeTitle = nodeLabel || previewContent;
 
@@ -80,7 +171,7 @@ function TreeNode({ node, blocks, selectedId, onSelect, expandedById, onToggleEx
             if (!hasChildren) return;
             onToggleExpand(node.id);
           }}
-          aria-label={expanded ? "Fechar secao" : "Abrir secao"}
+          aria-label={expanded ? "Fechar seção" : "Abrir seção"}
         >
           {hasChildren ? (expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />) : <span className="w-4 h-4" />}
         </button>
@@ -130,6 +221,7 @@ export default function ReferenceCreate() {
   const [expandedById, setExpandedById] = useState<Record<string, boolean>>({});
   const [collapsedById, setCollapsedById] = useState<Record<string, boolean>>({});
   const nodeIdMapRef = useRef<Map<string, number>>(new Map());
+  const contentInputRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const lastSavedSignatureRef = useRef("");
   const autosaveTimerRef = useRef<number | null>(null);
   const saveAllRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
@@ -261,6 +353,42 @@ export default function ReferenceCreate() {
     );
   };
 
+  const setContentInputRef = (id: string, element: HTMLDivElement | null, rawContent?: string) => {
+    contentInputRefs.current[id] = element;
+
+    if (element) {
+      const formattedContent = renderFormattedContent(rawContent || "");
+      if (element.innerHTML !== formattedContent) {
+        element.innerHTML = formattedContent;
+      }
+    }
+  };
+
+  const formatNodeContent = (id: string, format: NodeFormat) => {
+    const input = contentInputRefs.current[id];
+
+    if (!input) {
+      return;
+    }
+
+    setSelectedId(id);
+    input.focus();
+
+    if (format === "bold") {
+      document.execCommand("bold");
+    } else if (format === "italic") {
+      document.execCommand("italic");
+    } else if (format === "underline") {
+      document.execCommand("underline");
+    } else if (format === "quote") {
+      document.execCommand("formatBlock", false, "blockquote");
+    } else {
+      document.execCommand("insertUnorderedList");
+    }
+
+    updateBlock(id, { content: input.innerHTML });
+  };
+
   const normalizeSiblingPositions = (draftBlocks: DraftBlock[]) => {
     const byParent = new Map<string | null, DraftBlock[]>();
 
@@ -361,14 +489,14 @@ export default function ReferenceCreate() {
 
         const createPayload = await createResponse.json().catch(() => null);
         if (!createResponse.ok) {
-          const createError: any = new Error("Falha ao criar referencia");
+          const createError: any = new Error("Falha ao criar referência");
           createError.data = createPayload;
           throw createError;
         }
 
         referenceId = Number((createPayload as any)?.id ?? (createPayload as any)?.data?.id ?? 0);
         if (!referenceId) {
-          throw new Error("Nao foi possivel criar referencia");
+          throw new Error("Não foi possível criar referência");
         }
 
         setPersistedReferenceId(referenceId);
@@ -389,7 +517,7 @@ export default function ReferenceCreate() {
 
         const updatePayload = await updateResponse.json().catch(() => null);
         if (!updateResponse.ok) {
-          const updateError: any = new Error("Falha ao atualizar referencia");
+          const updateError: any = new Error("Falha ao atualizar referência");
           updateError.data = updatePayload;
           throw updateError;
         }
@@ -482,7 +610,7 @@ export default function ReferenceCreate() {
             });
 
             if (!response.ok) {
-              throw new Error("Falha ao atualizar node");
+              throw new Error("Falha ao atualizar nó");
             }
           }
 
@@ -502,7 +630,7 @@ export default function ReferenceCreate() {
       setSaveState("error");
 
       toast({
-        title: "Erro ao salvar referencia",
+        title: "Erro ao salvar referência",
         description: String(firstApiError || error?.message || "Erro inesperado"),
         variant: "destructive",
       });
@@ -581,22 +709,22 @@ export default function ReferenceCreate() {
   const saveLabel = saving || saveState === "saving"
     ? "Salvando..."
     : hasDraftWithoutTitle
-      ? "Nao sera salvo sem titulo"
+      ? "Não será salvo sem título"
     : saveState === "saved"
       ? "Salvo"
       : saveState === "error"
         ? "Erro ao salvar"
-        : "Sem alteracoes";
+        : "Sem alterações";
 
   return (
     <AppLayout>
       <AlertDialog open={showTitleRequiredModal}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Titulo obrigatorio para salvar</AlertDialogTitle>
+            <AlertDialogTitle>Título obrigatório para salvar</AlertDialogTitle>
             <AlertDialogDescription>
-              Voce comecou a editar, mas sem titulo a referencia nao sera salva automaticamente.
-              Preencha o titulo para ativar o autosave.
+              Você começou a editar, mas sem título a referência não será salva automaticamente.
+              Preencha o título para ativar o autosave.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -622,9 +750,9 @@ export default function ReferenceCreate() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir conteudo?</AlertDialogTitle>
+            <AlertDialogTitle>Excluir conteúdo?</AlertDialogTitle>
             <AlertDialogDescription>
-              Essa acao remove o conteudo selecionado e todos os nos e camadas dele.
+              Essa ação remove o conteúdo selecionado e todos os nós e camadas dele.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -692,7 +820,7 @@ export default function ReferenceCreate() {
                 className="w-full border-0 bg-transparent p-0 text-4xl md:text-5xl font-display font-semibold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/30"
                 value={referenceTitle}
                 onChange={(event) => setReferenceTitle(event.target.value)}
-                placeholder="titulo"
+                placeholder="título"
               />
             </div>
 
@@ -700,7 +828,7 @@ export default function ReferenceCreate() {
               className="w-full min-h-14 resize-none border-0 bg-transparent p-0 text-base leading-7 text-foreground outline-none placeholder:text-muted-foreground/30"
               value={referenceDescription}
               onChange={(event) => setReferenceDescription(event.target.value)}
-              placeholder="descricao"
+              placeholder="descrição"
             />
 
             <div className="space-y-1.5">
@@ -714,7 +842,7 @@ export default function ReferenceCreate() {
                   }`}
                   onClick={() => setLinkedChannelId("")}
                 >
-                  Sem vinculo
+                  Sem vínculo
                 </button>
                 {(channels ?? []).map((channel: any) => {
                   const active = linkedChannelId === String(channel.id);
@@ -749,7 +877,7 @@ export default function ReferenceCreate() {
               const selected = selectedId === block.id;
               const collapsed = Boolean(collapsedById[block.id]);
               const trimmedLabel = block.label.trim();
-              const trimmedContent = block.content.trim();
+              const trimmedContent = stripFormatting(block.content);
               const collapsedPreview = trimmedLabel
                 ? trimmedLabel
                 : trimmedContent
@@ -777,8 +905,8 @@ export default function ReferenceCreate() {
                           }
                           toggleNodeCollapse(block.id);
                         }}
-                        title={collapsed ? "Expandir no" : "Colapsar no"}
-                        aria-label={collapsed ? "Expandir no" : "Colapsar no"}
+                        title={collapsed ? "Expandir nó" : "Colapsar nó"}
+                        aria-label={collapsed ? "Expandir nó" : "Colapsar nó"}
                       >
                         {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                       </button>
@@ -795,17 +923,27 @@ export default function ReferenceCreate() {
                             onChange={(event) => {
                               updateBlock(block.id, { label: event.target.value });
                             }}
-                            placeholder="titulo (opcional)"
+                            placeholder="título (opcional)"
                             className="min-h-9 w-full border-0 bg-transparent px-0 py-1 text-xl font-display font-semibold text-foreground outline-none placeholder:text-muted-foreground/30"
                           />
 
-                          <textarea
-                            value={block.content}
-                            onChange={(event) => {
-                              updateBlock(block.id, { content: event.target.value });
+                          <div
+                            ref={(element) => setContentInputRef(block.id, element, block.content)}
+                            contentEditable
+                            suppressContentEditableWarning
+                            onPaste={(event) => {
+                              event.preventDefault();
+                              const plainText = event.clipboardData.getData("text/plain");
+                              document.execCommand("insertText", false, plainText);
+                              const activeInput = contentInputRefs.current[block.id];
+                              if (activeInput) {
+                                updateBlock(block.id, { content: activeInput.innerHTML });
+                              }
                             }}
-                            placeholder="conteudo"
-                            className="min-h-24 w-full resize-y border-0 bg-transparent px-0 py-1 text-base leading-7 text-foreground/95 outline-none placeholder:text-muted-foreground/30"
+                            onInput={(event) => {
+                              updateBlock(block.id, { content: event.currentTarget.innerHTML });
+                            }}
+                            className="prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-blockquote:my-1 min-h-24 w-full border-0 bg-transparent px-0 py-1 text-base leading-7 text-foreground/95 outline-none"
                           />
                         </>
                       ) : (
@@ -813,9 +951,10 @@ export default function ReferenceCreate() {
                           <div className="min-h-9 w-full px-0 py-1 text-xl font-display font-semibold text-foreground">
                             {block.label.trim() || "..."}
                           </div>
-                          <div className="min-h-24 w-full px-0 py-1 text-base leading-7 text-foreground/95 break-words">
-                            {block.content.trim() || "..."}
-                          </div>
+                          <div
+                            className="prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-blockquote:my-1 min-h-24 w-full px-0 py-1 text-base leading-7 text-foreground/95 break-words"
+                            dangerouslySetInnerHTML={{ __html: renderFormattedContent(block.content || "...") }}
+                          />
                         </>
                       )}
 
@@ -849,15 +988,67 @@ export default function ReferenceCreate() {
                             </button>
                           </div>
 
-                          <button
-                            type="button"
-                            className="h-8 w-8 rounded-md border border-transparent bg-transparent text-rose-600 hover:border-rose-200/80 hover:bg-rose-50 inline-flex items-center justify-center"
-                            onClick={() => setPendingDeleteNodeId(block.id)}
-                            title="Remover bloco"
-                            aria-label="Remover bloco"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              className="h-7 w-7 rounded-md border border-border/50 bg-transparent text-muted-foreground hover:bg-secondary/40 inline-flex items-center justify-center"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => formatNodeContent(block.id, "bold")}
+                              title="Negrito"
+                              aria-label="Negrito"
+                            >
+                              <Bold className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              className="h-7 w-7 rounded-md border border-border/50 bg-transparent text-muted-foreground hover:bg-secondary/40 inline-flex items-center justify-center"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => formatNodeContent(block.id, "italic")}
+                              title="Itálico"
+                              aria-label="Itálico"
+                            >
+                              <Italic className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              className="h-7 w-7 rounded-md border border-border/50 bg-transparent text-muted-foreground hover:bg-secondary/40 inline-flex items-center justify-center"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => formatNodeContent(block.id, "underline")}
+                              title="Sublinhado"
+                              aria-label="Sublinhado"
+                            >
+                              <Underline className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              className="h-7 w-7 rounded-md border border-border/50 bg-transparent text-muted-foreground hover:bg-secondary/40 inline-flex items-center justify-center"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => formatNodeContent(block.id, "quote")}
+                              title="Citação"
+                              aria-label="Citação"
+                            >
+                              <MessageSquareQuote className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              className="h-7 w-7 rounded-md border border-border/50 bg-transparent text-muted-foreground hover:bg-secondary/40 inline-flex items-center justify-center"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => formatNodeContent(block.id, "list")}
+                              title="Lista"
+                              aria-label="Lista"
+                            >
+                              <List className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              className="h-8 w-8 rounded-md border border-transparent bg-transparent text-rose-600 hover:border-rose-200/80 hover:bg-rose-50 inline-flex items-center justify-center"
+                              onClick={() => setPendingDeleteNodeId(block.id)}
+                              title="Remover bloco"
+                              aria-label="Remover bloco"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       ) : null}
                       </div>
@@ -884,8 +1075,8 @@ export default function ReferenceCreate() {
                   }));
                   setSelectedId(next.id);
                 }}
-                aria-label="Criar node"
-                title="Criar node"
+                aria-label="Criar nó"
+                title="Criar nó"
               >
                 <Plus className="w-4 h-4" />
               </Button>

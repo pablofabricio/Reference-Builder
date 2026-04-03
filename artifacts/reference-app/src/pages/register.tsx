@@ -23,8 +23,8 @@ export default function Register() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     toast({
-      title: "Registration unavailable",
-      description: "Esta API nao expoe cadastro publico. Use um usuario existente para login.",
+      title: "Cadastro indisponível",
+      description: "Esta API não expõe cadastro público. Use um usuário existente para login.",
       variant: "destructive"
     });
     setLocation('/login');
@@ -42,14 +42,14 @@ export default function Register() {
             <Link href="/" className="inline-flex items-center gap-2 text-primary mb-8 hover:opacity-80 transition-opacity">
               <Compass className="w-8 h-8" />
             </Link>
-            <h2 className="text-3xl font-display font-bold text-foreground mb-2">Begin your journey</h2>
-            <p className="text-muted-foreground font-serif text-lg">Create an account to start writing notes.</p>
+            <h2 className="text-3xl font-display font-bold text-foreground mb-2">Comece sua jornada</h2>
+            <p className="text-muted-foreground font-serif text-lg">Crie uma conta para começar a escrever notas.</p>
           </div>
 
           <div className="bg-card p-8 rounded-2xl shadow-xl shadow-black/5 border border-border/50">
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="name">Full name</Label>
+                <Label htmlFor="name">Nome completo</Label>
                 <Input 
                   id="name" 
                   placeholder="Jane Doe"
@@ -61,7 +61,7 @@ export default function Register() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="email">E-mail</Label>
                 <Input 
                   id="email" 
                   type="email" 
@@ -74,7 +74,7 @@ export default function Register() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">Senha</Label>
                 <Input 
                   id="password" 
                   type="password" 
@@ -92,15 +92,15 @@ export default function Register() {
                 className="w-full h-12 rounded-xl text-base bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20"
                 disabled={registerMutation.isPending}
               >
-                {registerMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Create account"}
+                {registerMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Criar conta"}
               </Button>
             </form>
           </div>
 
           <div className="mt-8 text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
+            Já tem uma conta?{" "}
             <Link href="/login" className="font-medium text-primary hover:underline">
-              Sign in
+              Entrar
             </Link>
           </div>
         </motion.div>
@@ -112,7 +112,7 @@ export default function Register() {
         <div className="absolute inset-0 flex items-center justify-center p-24">
           <blockquote className="max-w-md text-center">
             <p className="text-3xl font-display italic text-foreground leading-relaxed">
-              "We read to know we are not alone."
+              "Lemos para saber que não estamos sozinhos."
             </p>
             <footer className="mt-6 font-serif text-muted-foreground text-lg">— C.S. Lewis</footer>
           </blockquote>

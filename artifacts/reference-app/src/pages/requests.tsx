@@ -172,7 +172,7 @@ export default function RequestsPage() {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody?.message || "Nao foi possivel revisar a solicitacao");
+        throw new Error(errorBody?.message || "Não foi possível revisar a solicitação");
       }
 
       const payload = await response.json();
@@ -180,9 +180,9 @@ export default function RequestsPage() {
 
       setRequests((prev) => prev.map((request) => (Number(request.id) === Number(updated.id) ? updated : request)));
       window.dispatchEvent(new Event("channel-requests-changed"));
-      toast({ title: status === "APPROVED" ? "Solicitacao aprovada" : "Solicitacao rejeitada" });
+      toast({ title: status === "APPROVED" ? "Solicitação aprovada" : "Solicitação rejeitada" });
     } catch (error: any) {
-      toast({ title: error?.message || "Erro ao revisar solicitacao", variant: "destructive" });
+      toast({ title: error?.message || "Erro ao revisar solicitação", variant: "destructive" });
     } finally {
       setActingId(null);
     }
@@ -197,14 +197,14 @@ export default function RequestsPage() {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody?.message || "Nao foi possivel cancelar a solicitacao");
+        throw new Error(errorBody?.message || "Não foi possível cancelar a solicitação");
       }
 
       setRequests((prev) => prev.filter((request) => Number(request.id) !== requestId));
       window.dispatchEvent(new Event("channel-requests-changed"));
-      toast({ title: "Solicitacao cancelada" });
+      toast({ title: "Solicitação cancelada" });
     } catch (error: any) {
-      toast({ title: error?.message || "Erro ao cancelar solicitacao", variant: "destructive" });
+      toast({ title: error?.message || "Erro ao cancelar solicitação", variant: "destructive" });
     } finally {
       setActingId(null);
     }
@@ -213,7 +213,7 @@ export default function RequestsPage() {
   const renderRequestCard = (request: JoinRequest, canReview: boolean) => {
     const status = String(request.status || "PENDING").toUpperCase();
     const channelName = String(request.channel?.name || `Canal ${request.channel_id}`);
-    const requesterName = String(request.requester?.name || usersById[request.requester_id]?.name || `Usuario ${request.requester_id}`);
+    const requesterName = String(request.requester?.name || usersById[request.requester_id]?.name || `Usuário ${request.requester_id}`);
     const requesterAvatar = String(
       request.requester?.avatar_url ||
       request.requester?.avatarUrl ||
@@ -302,7 +302,7 @@ export default function RequestsPage() {
                 disabled={actingId === request.id}
               >
                 {actingId === request.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4 mr-1" />}
-                Cancelar solicitacao
+                Cancelar solicitação
               </Button>
             </div>
           )}
@@ -320,7 +320,7 @@ export default function RequestsPage() {
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="font-display text-3xl font-bold text-foreground">Solicitacoes</h1>
+              <h1 className="font-display text-3xl font-bold text-foreground">Solicitações</h1>
             </div>
           </div>
         </div>
@@ -350,7 +350,7 @@ export default function RequestsPage() {
 
             <TabsContent value="incoming" className="mt-0 space-y-3">
               {incomingRequests.length === 0 ? (
-                <div className="text-center py-16 text-muted-foreground font-serif text-lg">Nenhuma solicitacao recebida.</div>
+                <div className="text-center py-16 text-muted-foreground font-serif text-lg">Nenhuma solicitação recebida.</div>
               ) : (
                 incomingRequests.map((request) => renderRequestCard(request, true))
               )}
@@ -358,7 +358,7 @@ export default function RequestsPage() {
 
             <TabsContent value="outgoing" className="mt-0 space-y-3">
               {outgoingRequests.length === 0 ? (
-                <div className="text-center py-16 text-muted-foreground font-serif text-lg">Nenhuma solicitacao enviada.</div>
+                <div className="text-center py-16 text-muted-foreground font-serif text-lg">Nenhuma solicitação enviada.</div>
               ) : (
                 outgoingRequests.map((request) => renderRequestCard(request, false))
               )}

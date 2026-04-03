@@ -238,7 +238,7 @@ export default function Home() {
       if (directReferenceId > 0) {
         return {
           referenceId: directReferenceId,
-          label: directLabel || `Referencia ${directReferenceId}`,
+          label: directLabel || `Referência ${directReferenceId}`,
           content: directContent,
         };
       }
@@ -247,7 +247,7 @@ export default function Home() {
       if (nodeId > 0 && referenceNodesById[nodeId]) {
         return {
           referenceId: Number(referenceNodesById[nodeId].referenceId),
-          label: String(referenceNodesById[nodeId].label || `Referencia ${referenceNodesById[nodeId].referenceId}`),
+          label: String(referenceNodesById[nodeId].label || `Referência ${referenceNodesById[nodeId].referenceId}`),
           content: String(referenceNodesById[nodeId].content || ""),
         };
       }
@@ -324,23 +324,23 @@ export default function Home() {
           </div>
         ) : feedNotes.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground font-serif bg-card rounded-2xl border border-border/50">
-            Nenhuma nota recente encontrada para os seus canais e referencias.
+            Nenhuma nota recente encontrada para os seus canais e referências.
           </div>
         ) : (
           <div className="space-y-5">
             {feedNotes.map((note: any) => {
               const authorId = Number(note?.user?.id ?? note?.userId ?? note?.user_id ?? 0);
-              const authorName = String(note?.user?.name || usersById[authorId]?.name || `Usuario ${authorId || "desconhecido"}`).trim();
+              const authorName = String(note?.user?.name || usersById[authorId]?.name || `Usuário ${authorId || "desconhecido"}`).trim();
               const authorAvatar = String(note?.user?.avatar_url || note?.user?.avatarUrl || usersById[authorId]?.avatarUrl || "").trim();
               const createdAt = note?.createdAt || note?.created_at;
               const channelId = Number(note?.channelId ?? note?.channel_id ?? 0);
               const noteNodeId = Number(note?.referenceNodeId ?? note?.reference_node_id ?? 0);
               const mappedReference = noteNodeId > 0 ? referenceNodesById[noteNodeId] : undefined;
               const referenceId = Number(note?.referenceNode?.referenceId ?? mappedReference?.referenceId ?? 0);
-              const referenceLabel = String(note?.referenceNode?.label || mappedReference?.label || `Referencia ${referenceId || ""}`);
+              const referenceLabel = String(note?.referenceNode?.label || mappedReference?.label || `Referência ${referenceId || ""}`);
               const referenceContent = String(note?.referenceNode?.content || mappedReference?.content || "").trim();
               const referenceRow = referenceId > 0 ? referencesById.get(referenceId) : null;
-              const referenceTitle = String(referenceRow?.title || referenceLabel || `Referencia ${referenceId || ""}`);
+              const referenceTitle = String(referenceRow?.title || referenceLabel || `Referência ${referenceId || ""}`);
               const referenceType = String(referenceRow?.type || "").trim().toUpperCase();
               const fallbackChannelId = channelId > 0
                 ? channelId
@@ -368,7 +368,7 @@ export default function Home() {
                 : resolvedReferenceHref;
               const metaBadge = hasChannelOrigin
                 ? "Canal"
-                : (referenceType || "Referencia");
+                : (referenceType || "Referência");
 
               return (
                 <Card key={note.id} className="rounded-2xl border-border/50 shadow-sm">

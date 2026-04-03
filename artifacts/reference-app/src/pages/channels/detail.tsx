@@ -372,7 +372,7 @@ export default function ChannelDetail() {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody?.message || "Nao foi possivel atualizar permissao");
+        throw new Error(errorBody?.message || "Não foi possível atualizar permissão");
       }
 
       setChannelMembers((prev) =>
@@ -406,7 +406,7 @@ export default function ChannelDetail() {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody?.message || "Nao foi possivel remover membro");
+        throw new Error(errorBody?.message || "Não foi possível remover membro");
       }
 
       setChannelMembers((prev) => prev.filter((member: any) => Number(member.id) !== membershipId));
@@ -430,7 +430,7 @@ export default function ChannelDetail() {
 
         if (!response.ok) {
           const errorBody = await response.json().catch(() => ({}));
-          throw new Error(errorBody?.message || "Nao foi possivel cancelar solicitacao");
+          throw new Error(errorBody?.message || "Não foi possível cancelar solicitação");
         }
 
         setPendingJoinRequestByChannelId((prev) => {
@@ -439,7 +439,7 @@ export default function ChannelDetail() {
           return next;
         });
         window.dispatchEvent(new Event("channel-requests-changed"));
-        toast({ title: "Solicitacao cancelada" });
+        toast({ title: "Solicitação cancelada" });
       } else {
         const response = await fetch(`/api/channels/${channelId}/join`, {
           method: "POST",
@@ -447,7 +447,7 @@ export default function ChannelDetail() {
 
         if (!response.ok) {
           const errorBody = await response.json().catch(() => ({}));
-          throw new Error(errorBody?.message || "Nao foi possivel solicitar entrada");
+          throw new Error(errorBody?.message || "Não foi possível solicitar entrada");
         }
 
         const payload = await response.json().catch(() => ({}));
@@ -456,11 +456,11 @@ export default function ChannelDetail() {
           setPendingJoinRequestByChannelId((prev) => ({ ...prev, [channelId]: requestId }));
         }
         window.dispatchEvent(new Event("channel-requests-changed"));
-        toast({ title: "Solicitacao enviada" });
+        toast({ title: "Solicitação enviada" });
         setLocation("/requests?tab=outgoing");
       }
     } catch (error: any) {
-      toast({ title: error?.message || "Erro ao atualizar solicitacao", variant: "destructive" });
+      toast({ title: error?.message || "Erro ao atualizar solicitação", variant: "destructive" });
     } finally {
       setIsRequestingJoin(false);
     }
@@ -474,7 +474,7 @@ export default function ChannelDetail() {
       await navigator.clipboard.writeText(requestLink);
       toast({ title: "Convite copiado", description: "Compartilhe este convite para solicitarem entrada." });
     } catch {
-      toast({ title: "Nao foi possivel copiar o link", variant: "destructive" });
+      toast({ title: "Não foi possível copiar o link", variant: "destructive" });
     }
   };
 
@@ -490,7 +490,7 @@ export default function ChannelDetail() {
 
     if (hasPendingJoinRequest) {
       setHandledRequestLinkFlow(true);
-      toast({ title: "Solicitacao ja enviada" });
+      toast({ title: "Solicitação já enviada" });
       return;
     }
 
@@ -526,7 +526,7 @@ export default function ChannelDetail() {
         headers,
         body: JSON.stringify({ title: createForm.title, type: createForm.type, author: createForm.author || undefined, description: createForm.description || undefined }),
       });
-      if (!refRes.ok) throw new Error("Erro ao criar referencia");
+      if (!refRes.ok) throw new Error("Erro ao criar referência");
       const newRef = await refRes.json();
       const refId = Number(newRef.id ?? newRef.data?.id);
 
@@ -536,7 +536,7 @@ export default function ChannelDetail() {
         body: JSON.stringify({ reference_id: refId }),
       });
 
-      toast({ title: "Referencia criada", description: createForm.title });
+      toast({ title: "Referência criada", description: createForm.title });
       setShowCreateDialog(false);
       setCreateForm({ title: "", type: "BIBLE", author: "", description: "" });
       setLocation(`/references/${refId}`);
@@ -569,14 +569,14 @@ export default function ChannelDetail() {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody?.message || "Nao foi possivel editar a referencia");
+        throw new Error(errorBody?.message || "Não foi possível editar a referência");
       }
 
-      toast({ title: "Referencia atualizada" });
+      toast({ title: "Referência atualizada" });
       setEditingReferenceId(null);
       window.location.reload();
     } catch (e: any) {
-      toast({ title: e?.message || "Erro ao editar referencia", variant: "destructive" });
+      toast({ title: e?.message || "Erro ao editar referência", variant: "destructive" });
     } finally {
       setIsEditingReference(false);
     }
@@ -603,7 +603,7 @@ export default function ChannelDetail() {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody?.message || "Nao foi possivel editar o channel");
+        throw new Error(errorBody?.message || "Não foi possível editar o channel");
       }
 
       toast({ title: "Channel atualizado" });
@@ -619,7 +619,7 @@ export default function ChannelDetail() {
   const handleDeleteChannel = async () => {
     if (!channelId || !canDeleteChannel || isDeletingChannel) return;
 
-    const confirmed = window.confirm("Excluir este channel? Esta acao nao pode ser desfeita.");
+    const confirmed = window.confirm("Excluir este channel? Esta ação não pode ser desfeita.");
     if (!confirmed) return;
 
     setIsDeletingChannel(true);
@@ -632,7 +632,7 @@ export default function ChannelDetail() {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody?.message || "Nao foi possivel excluir o channel");
+        throw new Error(errorBody?.message || "Não foi possível excluir o channel");
       }
 
       queryClient.invalidateQueries({ queryKey: getListChannelsQueryKey() });
@@ -726,7 +726,7 @@ export default function ChannelDetail() {
       return getUserDisplayName(authorId, note.user?.name ?? null);
     }
 
-    return "Autor nao informado";
+    return "Autor não informado";
   };
 
   const getNoteAuthorId = (note: any) => Number(note?.user?.id ?? note?.userId ?? note?.user_id ?? 0);
@@ -738,7 +738,7 @@ export default function ChannelDetail() {
       await navigator.clipboard.writeText(value);
       toast({ title: "Texto copiado" });
     } catch {
-      toast({ title: "Nao foi possivel copiar", variant: "destructive" });
+      toast({ title: "Não foi possível copiar", variant: "destructive" });
     }
   };
 
@@ -765,7 +765,7 @@ export default function ChannelDetail() {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody?.message || "Nao foi possivel criar a note");
+        throw new Error(errorBody?.message || "Não foi possível criar a note");
       }
 
       const payload = await response.json();
@@ -848,7 +848,7 @@ export default function ChannelDetail() {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody?.message || "Nao foi possivel editar o node");
+        throw new Error(errorBody?.message || "Não foi possível editar o node");
       }
 
       const updatedPayload = await response.json().catch(() => ({}));
@@ -932,7 +932,7 @@ export default function ChannelDetail() {
                     e.stopPropagation();
                     copyText(String(node.content));
                   }}
-                  aria-label="Copiar texto da referencia"
+                  aria-label="Copiar texto da referência"
                 >
                   <Copy className="w-3.5 h-3.5" />
                 </button>
@@ -969,7 +969,7 @@ export default function ChannelDetail() {
                   }
                   setEditorNodeId(nodeId);
                 }}
-                aria-label={isNodeEditorOpen ? "Fechar editor de note" : "Criar note no verso"}
+                aria-label={isNodeEditorOpen ? "Fechar editor de nota" : "Criar nota no verso"}
               >
                 <FileText className="w-3.5 h-3.5" />
               </button>
@@ -1046,7 +1046,7 @@ export default function ChannelDetail() {
                   className="w-full min-h-24 resize-y rounded-lg border border-border/60 bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                   value={nodeEditDraft.content}
                   onChange={(e) => setNodeEditDraft((prev) => ({ ...prev, content: e.target.value }))}
-                  placeholder="Conteudo"
+                  placeholder="Conteúdo"
                 />
                 <div className="flex items-center justify-end gap-2">
                   <button
@@ -1189,7 +1189,7 @@ export default function ChannelDetail() {
               <Input
                 value={editChannelForm.description}
                 onChange={(e) => setEditChannelForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="Descricao do channel"
+                placeholder="Descrição do channel"
               />
               <div className="flex items-center justify-end gap-2">
                 <button
@@ -1262,7 +1262,7 @@ export default function ChannelDetail() {
                 disabled={isRequestingJoin || (!canRequestJoin && !hasPendingJoinRequest)}
               >
                 {isRequestingJoin ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                {hasPendingJoinRequest ? "Solicitacao enviada" : "Solicitar entrada"}
+                {hasPendingJoinRequest ? "Solicitação enviada" : "Solicitar entrada"}
               </button>
             </div>
           )}
@@ -1272,7 +1272,7 @@ export default function ChannelDetail() {
           <TabsList className="rounded-2xl bg-card border border-border/50 h-auto p-1">
             <TabsTrigger value="references" className="rounded-xl px-4 py-2.5 gap-2">
               <BookOpen className="w-4 h-4" />
-              Referencias
+              Referências
               <span className="rounded-full bg-background/80 px-2 py-0.5 text-xs text-muted-foreground border border-border/50">
                 {references.length}
               </span>
@@ -1295,13 +1295,13 @@ export default function ChannelDetail() {
                   onClick={() => setShowCreateDialog(true)}
                 >
                   <Plus className="w-4 h-4" />
-                  Criar referencia
+                  Criar referência
                 </button>
               </div>
             )}
             {filteredReferences.length === 0 ? (
               <div className="text-center py-20 text-muted-foreground font-serif text-lg">
-                Nenhuma referencia vinculada a este canal.
+                Nenhuma referência vinculada a este canal.
               </div>
             ) : (
               <div className="space-y-4">
@@ -1348,7 +1348,7 @@ export default function ChannelDetail() {
                                   <span>{referenceCreatorName}</span>
                                 )}
                               </span>
-                              <span>{ref.author || "Autor nao informado"}</span>
+                              <span>{ref.author || "Autor não informado"}</span>
                             </div>
                           </div>
                         </div>
@@ -1371,7 +1371,7 @@ export default function ChannelDetail() {
                                 });
                                 setEditingReferenceId((prev) => (prev === Number(ref.id) ? null : Number(ref.id)));
                               }}
-                              aria-label="Editar referencia"
+                              aria-label="Editar referência"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
@@ -1387,7 +1387,7 @@ export default function ChannelDetail() {
                             <Input
                               value={editForm.title}
                               onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
-                              placeholder="Titulo"
+                              placeholder="Título"
                             />
                             <select
                               className="w-full h-10 rounded-xl bg-background border border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -1408,14 +1408,14 @@ export default function ChannelDetail() {
                             <Input
                               value={editForm.description}
                               onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
-                              placeholder="Descricao"
+                              placeholder="Descrição"
                             />
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 type="button"
                                 className="inline-flex items-center justify-center rounded-lg border border-border/60 p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
                                 onClick={() => setEditingReferenceId(null)}
-                                aria-label="Cancelar edicao da referencia"
+                                aria-label="Cancelar edição da referência"
                               >
                                 <X className="w-4 h-4" />
                               </button>
@@ -1424,7 +1424,7 @@ export default function ChannelDetail() {
                                 className="inline-flex items-center justify-center rounded-lg bg-primary p-1.5 text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
                                 onClick={handleEditReference}
                                 disabled={isEditingReference || !editForm.title.trim()}
-                                aria-label="Salvar referencia"
+                                aria-label="Salvar referência"
                               >
                                 {isEditingReference ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                               </button>
@@ -1496,7 +1496,7 @@ export default function ChannelDetail() {
                               onClick={() => setLocation(`/channels/user/${memberUserId}`)}
                               disabled={!memberUserId}
                             >
-                              {memberName}{isCurrentUser ? " (voce)" : ""}
+                              {memberName}{isCurrentUser ? " (você)" : ""}
                             </button>
                           </div>
                         </div>
@@ -1552,11 +1552,11 @@ export default function ChannelDetail() {
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Nova referencia</DialogTitle>
+            <DialogTitle>Nova referência</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label htmlFor="ref-title">Titulo *</Label>
+              <Label htmlFor="ref-title">Título *</Label>
               <Input id="ref-title" value={createForm.title} onChange={(e) => setCreateForm((f) => ({ ...f, title: e.target.value }))} placeholder="Ex: Filipenses" />
             </div>
             <div className="space-y-1.5">
@@ -1579,8 +1579,8 @@ export default function ChannelDetail() {
               <Input id="ref-author" value={createForm.author} onChange={(e) => setCreateForm((f) => ({ ...f, author: e.target.value }))} placeholder="Ex: Paulo" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="ref-desc">Descricao</Label>
-              <Input id="ref-desc" value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} placeholder="Breve descricao..." />
+              <Label htmlFor="ref-desc">Descrição</Label>
+              <Input id="ref-desc" value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} placeholder="Breve descrição..." />
             </div>
           </div>
           <DialogFooter>

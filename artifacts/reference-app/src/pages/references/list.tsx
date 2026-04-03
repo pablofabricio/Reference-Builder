@@ -247,7 +247,7 @@ export default function ReferencesList() {
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : channelSections.length === 0 && standaloneTypes.length === 0 ? (
-            <p className="text-sm text-muted-foreground italic font-serif">Nenhuma referencia encontrada.</p>
+            <p className="text-sm text-muted-foreground italic font-serif">Nenhuma referência encontrada.</p>
           ) : (
             <div className="space-y-12">
 
@@ -277,11 +277,11 @@ export default function ReferencesList() {
                               <CardContent className="pt-0">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                   <UserAvatar
-                                    name={usersById[section.creatorId]?.name || `Usuario ${section.creatorId || "desconhecido"}`}
+                                    name={usersById[section.creatorId]?.name || `Usuário ${section.creatorId || "desconhecido"}`}
                                     src={usersById[section.creatorId]?.avatarUrl}
                                     size="sm"
                                   />
-                                  <span>{usersById[section.creatorId]?.name || `Usuario ${section.creatorId || "desconhecido"}`}</span>
+                                  <span>{usersById[section.creatorId]?.name || `Usuário ${section.creatorId || "desconhecido"}`}</span>
                                 </div>
                               </CardContent>
                             </Card>
@@ -292,12 +292,12 @@ export default function ReferencesList() {
 
                     {channelsByGroup.public.length > 0 && (
                       <div>
-                        <h3 className="text-sm font-semibold text-muted-foreground mb-3">Publicos</h3>
+                        <h3 className="text-sm font-semibold text-muted-foreground mb-3">Públicos</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           {channelsByGroup.public.map((section) => (
                             <Card key={`public-${section.id}`} className="border-border/50 shadow-sm">
                               <CardHeader className="pb-2">
-                                <CardDescription>Canal publico</CardDescription>
+                                <CardDescription>Canal público</CardDescription>
                                 <CardTitle className="text-base">
                                   <button
                                     type="button"
@@ -311,11 +311,11 @@ export default function ReferencesList() {
                               <CardContent className="pt-0">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                   <UserAvatar
-                                    name={usersById[section.creatorId]?.name || `Usuario ${section.creatorId || "desconhecido"}`}
+                                    name={usersById[section.creatorId]?.name || `Usuário ${section.creatorId || "desconhecido"}`}
                                     src={usersById[section.creatorId]?.avatarUrl}
                                     size="sm"
                                   />
-                                  <span>{usersById[section.creatorId]?.name || `Usuario ${section.creatorId || "desconhecido"}`}</span>
+                                  <span>{usersById[section.creatorId]?.name || `Usuário ${section.creatorId || "desconhecido"}`}</span>
                                 </div>
                               </CardContent>
                             </Card>
@@ -345,11 +345,11 @@ export default function ReferencesList() {
                               <CardContent className="pt-0">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                   <UserAvatar
-                                    name={usersById[section.creatorId]?.name || `Usuario ${section.creatorId || "desconhecido"}`}
+                                    name={usersById[section.creatorId]?.name || `Usuário ${section.creatorId || "desconhecido"}`}
                                     src={usersById[section.creatorId]?.avatarUrl}
                                     size="sm"
                                   />
-                                  <span>{usersById[section.creatorId]?.name || `Usuario ${section.creatorId || "desconhecido"}`}</span>
+                                  <span>{usersById[section.creatorId]?.name || `Usuário ${section.creatorId || "desconhecido"}`}</span>
                                 </div>
                               </CardContent>
                             </Card>

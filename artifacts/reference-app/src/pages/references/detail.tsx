@@ -101,7 +101,7 @@ const TreeNode = ({
             if (!hasChildren) return;
             setExpanded((prev) => !prev);
           }}
-          aria-label={expanded ? "Fechar secao" : "Abrir secao"}
+          aria-label={expanded ? "Fechar seção" : "Abrir seção"}
         >
           {hasChildren ? (expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />) : <span className="w-4 h-4" />}
         </button>
@@ -587,7 +587,7 @@ export default function ReferenceDetail() {
       return String(user?.name || "").trim();
     }
 
-    return authorId > 0 ? `User ${authorId}` : "Autor nao informado";
+    return authorId > 0 ? `User ${authorId}` : "Autor não informado";
   };
 
   const getNoteAuthorAvatar = (note: any) => {
@@ -684,7 +684,7 @@ export default function ReferenceDetail() {
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}));
-        throw new Error(errorPayload?.message || "Nao foi possivel criar a nota");
+        throw new Error(errorPayload?.message || "Não foi possível criar a nota");
       }
 
       setInlineNoteDraft("");
@@ -765,7 +765,7 @@ export default function ReferenceDetail() {
         });
       }
 
-      if (!response.ok) throw new Error("Nao foi possivel editar o node");
+      if (!response.ok) throw new Error("Não foi possível editar o node");
 
       setAllNodes((prev) => prev.map((row: any) => {
         if (Number(row.id) !== Number(editingNodeId)) return row;
@@ -891,7 +891,7 @@ export default function ReferenceDetail() {
               type="button"
               className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
               onClick={() => setLocation("/references")}
-              aria-label="Voltar para referencias"
+              aria-label="Voltar para referências"
               title="Voltar"
             >
               <ChevronRight className="h-4 w-4 rotate-180" />
@@ -902,7 +902,7 @@ export default function ReferenceDetail() {
             {loadingNodes ? (
               <div className="flex justify-center p-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
             ) : navigatorReferences.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic p-4 font-serif">No structure defined yet.</p>
+              <p className="text-sm text-muted-foreground italic p-4 font-serif">Nenhuma estrutura definida ainda.</p>
             ) : (
               <div className="space-y-1.5">
                 <div className="rounded-xl border border-border/50 bg-card/70 overflow-hidden">
@@ -916,7 +916,7 @@ export default function ReferenceDetail() {
                         </Link>
                       ) : (
                         <p className="truncate font-display text-base font-semibold text-foreground">
-                          {currentChannelName || "Referencia"}
+                          {currentChannelName || "Referência"}
                         </p>
                       )}
                     </div>
@@ -957,7 +957,7 @@ export default function ReferenceDetail() {
                                 if (!isActiveReference || relatedRootNodes.length === 0) return;
                                 setIsActiveReferenceExpanded((prev) => !prev);
                               }}
-                              aria-label={showReferenceNodes ? "Fechar referencia" : "Abrir referencia"}
+                              aria-label={showReferenceNodes ? "Fechar referência" : "Abrir referência"}
                             >
                               {showReferenceNodes && relatedRootNodes.length > 0 ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                             </button>
@@ -1095,7 +1095,7 @@ export default function ReferenceDetail() {
                                     startEditingNode(node);
                                   }}
                                 >
-                                  {label || "Sem titulo"}
+                                  {label || "Sem título"}
                                 </h2>
                               )}
                             </div>
@@ -1160,7 +1160,7 @@ export default function ReferenceDetail() {
                                 startEditingNode(node);
                               }}
                             >
-                              Sem conteudo textual.
+                              Sem conteúdo textual.
                             </p>
                           )}
                         </div>
@@ -1264,7 +1264,7 @@ export default function ReferenceDetail() {
                       className={`text-muted-foreground italic font-serif ${canEditNode ? "cursor-text" : ""}`}
                       onClick={startEditingNode}
                     >
-                      No text content available for this section.
+                      Nenhum conteúdo de texto disponível para esta seção.
                     </p>
                   )}
                 </div>
