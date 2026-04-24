@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams, useSearch } from "wouter";
-import { getListNotesQueryKey, useDeleteNote, useGetReference, useListChannels, useListNotes, useListReferences, useUpdateNote, type ReferenceNode } from "@workspace/api-client-react";
+import { getListNotesQueryKey, useDeleteNote, useGetReference, useListChannels, useListNotes, useListReferenceNodes, useListReferences, type ReferenceNode } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Loader2, ChevronRight, ChevronDown, AlignLeft, Plus, Copy, Trash2, MessageCircle } from "lucide-react";
+import { Loader2, ChevronRight, ChevronDown, AlignLeft, Plus, Copy, Trash2, MessageCircle, Bold, Italic, Underline, MessageSquareQuote, List, ListOrdered, Minus } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,9 +11,180 @@ import { useToast } from "@/hooks/use-toast";
 import { UserAvatar } from "@/components/ui/user-avatar";
 
 type UserSummary = { name: string; avatarUrl?: string };
+type NodeFormat = "bold" | "italic" | "underline" | "quote" | "ordered-list" | "dash-list" | "bullet-list" | "break";
+type HighlightColor = "yellow" | "green" | "blue" | "pink";
 
-const getNodeParentId = (node: ReferenceNode | any) => node.parentNodeId ?? node.parent_node_id ?? null;
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const sanitizeHtml = (raw: string) =>
+  raw
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
+    .replace(/\son\w+=\"[^\"]*\"/gi, "")
+    .replace(/\son\w+=\'[^\']*\'/gi, "")
+    .replace(/javascript:/gi, "");
+
+const highlightColorMap: Record<HighlightColor, string> = {
+  yellow: "#fef08a",
+  green: "#bbf7d0",
+  blue: "#bfdbfe",
+  pink: "#fbcfe8",
+};
+
+const blockquoteClassName = "reference-blockquote";
+const bulletListClassName = "reference-list-bullet";
+const dashListClassName = "reference-list-dash";
+const breakClassName = "reference-break";
+
+const wrapCurrentSelection = (beforeHtml: string, afterHtml: string, fallbackText = "") => {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return false;
+
+  const range = selection.getRangeAt(0);
+  const selectedHtml = range.toString().trim();
+  const html = `${beforeHtml}${selectedHtml || fallbackText}${afterHtml}`;
+  document.execCommand("insertHTML", false, html);
+  return true;
+};
+
+const getSelectionTextLines = () => {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return [] as string[];
+
+  return selection
+    .toString()
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+};
+
+const insertListFromSelection = (variant: "ordered" | "dash" | "bullet") => {
+  const lines = getSelectionTextLines();
+  const items = (lines.length > 0 ? lines : [""])
+    .map((line) => `<li>${line ? escapeHtml(line) : "<br />"}</li>`)
+    .join("");
+
+  if (variant === "ordered") {
+    document.execCommand("insertHTML", false, `<ol>${items}</ol>`);
+    return;
+  }
+
+  if (variant === "dash") {
+    document.execCommand("insertHTML", false, `<ul class=\"${dashListClassName}\">${items}</ul>`);
+    return;
+  }
+
+  document.execCommand("insertHTML", false, `<ul class=\"${bulletListClassName}\">${items}</ul>`);
+};
+
+const applyHighlightToSelection = (color: HighlightColor) => {
+  const hex = highlightColorMap[color];
+  if (!hex) return;
+
+  if (document.queryCommandSupported?.("hiliteColor")) {
+    document.execCommand("styleWithCSS", false, "true");
+    document.execCommand("hiliteColor", false, hex);
+    return;
+  }
+
+  wrapCurrentSelection(`<mark style=\"background:${hex};padding:0 .08em;border-radius:.12em;\">`, "</mark>", "texto");
+};
+
+const renderInlineFormatting = (raw: string) => {
+  const escaped = escapeHtml(raw);
+  return escaped
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>")
+    .replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/g, "<u>$1</u>");
+};
+
+const renderFormattedContent = (raw: string) => {
+  if (/<\/?[a-z][\s\S]*>/i.test(raw)) {
+    return sanitizeHtml(raw);
+  }
+
+  const lines = raw.split("\n");
+  const chunks: string[] = [];
+  let listBuffer: string[] = [];
+
+  const flushList = () => {
+    if (listBuffer.length === 0) {
+      return;
+    }
+
+    chunks.push(`<ul>${listBuffer.join("")}</ul>`);
+    listBuffer = [];
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("- ")) {
+      const item = trimmed.slice(2);
+      listBuffer.push(`<li>${renderInlineFormatting(item)}</li>`);
+      return;
+    }
+
+    flushList();
+
+    if (!trimmed) {
+      chunks.push("<p><br /></p>");
+      return;
+    }
+
+    if (trimmed.startsWith("> ")) {
+      chunks.push(`<blockquote>${renderInlineFormatting(trimmed.slice(2))}</blockquote>`);
+      return;
+    }
+
+    chunks.push(`<p>${renderInlineFormatting(line)}</p>`);
+  });
+
+  flushList();
+
+  return chunks.join("");
+};
+
+const stripHtmlToText = (raw: string) =>
+  String(raw || "")
+    .replace(/<blockquote[^>]*>/gi, "")
+    .replace(/<\/blockquote>/gi, "")
+    .replace(/<li[^>]*>/gi, "- ")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+const normalizeRichContentForCompare = (raw: string) =>
+  renderFormattedContent(String(raw || ""))
+    .replace(/>\s+</g, "><")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+const getNodeParentId = (node: ReferenceNode | any) => {
+  const raw = node.parentNodeId ?? node.parent_node_id ?? null;
+  const normalized = Number(raw);
+
+  if (raw == null || Number.isNaN(normalized) || normalized <= 0) {
+    return null;
+  }
+
+  return normalized;
+};
 const getNodePosition = (node: ReferenceNode | any) => Number(node.position ?? 0);
+const getNodeReferenceId = (node: ReferenceNode | any) => Number(node.referenceId ?? node.reference_id ?? 0);
 const getReferenceSortOrder = (reference: any) => {
   const title = String(reference?.title || "");
   const weekMatch = title.match(/Semana\s*(\d+)/i);
@@ -24,6 +195,10 @@ const getReferenceVisibleRootNodes = (referenceTitle: string | null | undefined,
   const rootNodes = nodes
     .filter((node) => getNodeParentId(node) == null)
     .sort((a, b) => getNodePosition(a) - getNodePosition(b));
+
+  if (rootNodes.length === 0 && nodes.length > 0) {
+    return [...nodes].sort((a, b) => getNodePosition(a) - getNodePosition(b));
+  }
 
   if (rootNodes.length !== 1) return rootNodes;
 
@@ -38,6 +213,28 @@ const getReferenceVisibleRootNodes = (referenceTitle: string | null | undefined,
   return nodes
     .filter((node) => Number(getNodeParentId(node)) === Number(singleRoot.id))
     .sort((a, b) => getNodePosition(a) - getNodePosition(b));
+};
+
+const getReferenceTitleFromNodes = (nodes: ReferenceNode[]): string => {
+  if (!Array.isArray(nodes) || nodes.length === 0) return "";
+
+  const titleFromEmbeddedReference = nodes
+    .map((node: any) => String(node?.reference?.title || "").trim())
+    .find((title) => title.length > 0);
+
+  if (titleFromEmbeddedReference) {
+    return titleFromEmbeddedReference;
+  }
+
+  const rootNodes = nodes
+    .filter((node) => getNodeParentId(node) == null)
+    .sort((a, b) => getNodePosition(a) - getNodePosition(b));
+
+  if (rootNodes.length > 0) {
+    return String((rootNodes[0] as any)?.label || "").trim();
+  }
+
+  return String((nodes[0] as any)?.label || "").trim();
 };
 
 const flattenNodesForReading = (nodes: ReferenceNode[], rootNodes: ReferenceNode[], level = 0): Array<{ node: ReferenceNode; level: number }> => {
@@ -57,23 +254,107 @@ const flattenNodesForReading = (nodes: ReferenceNode[], rootNodes: ReferenceNode
   return output;
 };
 
+const getNodeAncestorIds = (nodes: ReferenceNode[], nodeId: number): number[] => {
+  const byId = new Map<number, ReferenceNode>();
+  nodes.forEach((node) => {
+    byId.set(Number(node.id), node);
+  });
+
+  const ancestors: number[] = [];
+  let currentParentId = getNodeParentId(byId.get(nodeId) as any);
+
+  while (currentParentId != null) {
+    ancestors.push(Number(currentParentId));
+    const parentNode = byId.get(Number(currentParentId));
+    if (!parentNode) break;
+    currentParentId = getNodeParentId(parentNode as any);
+  }
+
+  return ancestors;
+};
+
+const focusEditableAtEnd = (element: HTMLElement | null) => {
+  if (!element) return;
+
+  element.focus();
+
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+
+const focusEditableAtStart = (element: HTMLElement | null) => {
+  if (!element) return;
+
+  element.focus();
+
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+
+const focusEditableAtPoint = (element: HTMLElement | null, x: number, y: number) => {
+  if (!element) return false;
+
+  element.focus();
+
+  const doc = document as any;
+  const selection = window.getSelection();
+  if (!selection) return false;
+
+  if (typeof doc.caretPositionFromPoint === "function") {
+    const caretPosition = doc.caretPositionFromPoint(x, y);
+    if (caretPosition?.offsetNode) {
+      const range = document.createRange();
+      range.setStart(caretPosition.offsetNode, caretPosition.offset);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return true;
+    }
+  }
+
+  if (typeof doc.caretRangeFromPoint === "function") {
+    const caretRange = doc.caretRangeFromPoint(x, y);
+    if (caretRange) {
+      selection.removeAllRanges();
+      selection.addRange(caretRange);
+      return true;
+    }
+  }
+
+  return false;
+};
+
 // Recursive component to render the hierarchy
 const TreeNode = ({ 
   node, 
   nodes, 
   level = 0, 
   selectedNodeId, 
+  expandedNodeIds,
   onSelect,
-  expandAll = false,
+  onToggleExpand,
 }: { 
   node: ReferenceNode, 
   nodes: ReferenceNode[], 
   level?: number,
   selectedNodeId: number | null,
+  expandedNodeIds: Record<number, boolean>,
   onSelect: (id: number) => void,
-  expandAll?: boolean,
+  onToggleExpand: (id: number) => void,
 }) => {
-  const [expanded, setExpanded] = useState(level < 1 || expandAll);
+  const expanded = expandedNodeIds[Number(node.id)] ?? level < 2;
   const children = nodes
     .filter(n => Number(getNodeParentId(n)) === Number(node.id))
     .sort((a, b) => getNodePosition(a) - getNodePosition(b));
@@ -99,7 +380,7 @@ const TreeNode = ({
           onClick={(e) => {
             e.stopPropagation();
             if (!hasChildren) return;
-            setExpanded((prev) => !prev);
+            onToggleExpand(Number(node.id));
           }}
           aria-label={expanded ? "Fechar seção" : "Abrir seção"}
         >
@@ -117,8 +398,9 @@ const TreeNode = ({
               nodes={nodes} 
               level={level + 1} 
               selectedNodeId={selectedNodeId}
+              expandedNodeIds={expandedNodeIds}
               onSelect={onSelect}
-              expandAll={expandAll}
+              onToggleExpand={onToggleExpand}
             />
           ))}
         </div>
@@ -153,12 +435,17 @@ export default function ReferenceDetail() {
   }, [search]);
   
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
-  const [isActiveReferenceExpanded, setIsActiveReferenceExpanded] = useState(true);
+  const [expandedReferenceIds, setExpandedReferenceIds] = useState<Record<number, boolean>>({});
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Record<number, boolean>>({});
   const [allNodes, setAllNodes] = useState<ReferenceNode[]>([]);
   const [loadingAllNodes, setLoadingAllNodes] = useState(true);
+  const [loadingCurrentReferenceNodes, setLoadingCurrentReferenceNodes] = useState(false);
   const [channelReferenceLinks, setChannelReferenceLinks] = useState<any[]>([]);
   const [loadingChannelReferenceLinks, setLoadingChannelReferenceLinks] = useState(true);
+  const [fallbackNavigatorReferences, setFallbackNavigatorReferences] = useState<any[]>([]);
+  const [fallbackReferenceById, setFallbackReferenceById] = useState<any | null>(null);
   const [deletingNoteId, setDeletingNoteId] = useState<number | null>(null);
+  const [editSaveState, setEditSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [savingNoteInline, setSavingNoteInline] = useState(false);
   const [inlineNoteDraft, setInlineNoteDraft] = useState("");
   const [isCreatingNoteCard, setIsCreatingNoteCard] = useState(false);
@@ -166,6 +453,7 @@ export default function ReferenceDetail() {
   const [myChannelRole, setMyChannelRole] = useState<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
   const [editingNodeSnapshot, setEditingNodeSnapshot] = useState<any | null>(null);
+  const [editingNodeFocusField, setEditingNodeFocusField] = useState<"label" | "content">("label");
   const [nodeLabelDraft, setNodeLabelDraft] = useState("");
   const [nodeEditDraft, setNodeEditDraft] = useState("");
   const [savingNodeEdit, setSavingNodeEdit] = useState(false);
@@ -177,16 +465,19 @@ export default function ReferenceDetail() {
   const [noteEditDraft, setNoteEditDraft] = useState("");
   const [savingNoteEdit, setSavingNoteEdit] = useState(false);
   const noteAutosaveTimeoutRef = useRef<number | null>(null);
+  const saveIndicatorTimeoutRef = useRef<number | null>(null);
   const noteEditorRef = useRef<HTMLDivElement | null>(null);
   const newNoteEditorRef = useRef<HTMLDivElement | null>(null);
   const readingSwipeLockRef = useRef(false);
   const readingSwipeUnlockTimerRef = useRef<number | null>(null);
+  const pendingNodeEditorClickPointRef = useRef<{ x: number; y: number } | null>(null);
+  const nodeEditorFocusClass = "outline-none rounded-md px-1 -mx-1 caret-primary ring-2 ring-primary/35 bg-primary/5";
 
   const { data: reference, isLoading: loadingRef } = useGetReference(refId);
   const { data: references, isLoading: loadingReferences } = useListReferences();
+  const { data: referenceNodesByReferenceEndpoint, isLoading: loadingReferenceNodesByReferenceEndpoint } = useListReferenceNodes(refId);
   const { data: channels, isLoading: loadingChannels } = useListChannels();
   const deleteNoteMutation = useDeleteNote();
-  const updateNoteMutation = useUpdateNote();
 
   useEffect(() => {
     let isMounted = true;
@@ -228,11 +519,199 @@ export default function ReferenceDetail() {
   useEffect(() => {
     let isMounted = true;
 
+    const loadCurrentReferenceNodes = async () => {
+      if (!refId || Number.isNaN(refId)) return;
+
+      setLoadingCurrentReferenceNodes(true);
+      try {
+        const token = localStorage.getItem("auth_token");
+        const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+        const response = await fetch(`/api/reference-nodes?reference_id=${refId}`, { headers });
+        if (!response.ok) throw new Error("Failed to load nodes for reference");
+
+        const payload = await response.json();
+        const rows = Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload)
+            ? payload
+            : [];
+
+        if (isMounted) {
+          setAllNodes((previous) => {
+            const withoutCurrentReference = previous.filter(
+              (node: any) => getNodeReferenceId(node) !== refId,
+            );
+
+            return [...withoutCurrentReference, ...(rows as ReferenceNode[])];
+          });
+        }
+      } catch {
+        if (isMounted) {
+          setAllNodes((previous) => previous);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingCurrentReferenceNodes(false);
+        }
+      }
+    };
+
+    loadCurrentReferenceNodes();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [refId]);
+
+  useEffect(() => {
+    if (!refId || Number.isNaN(refId)) return;
+
+    const rows = Array.isArray(referenceNodesByReferenceEndpoint)
+      ? referenceNodesByReferenceEndpoint
+      : [];
+
+    if (rows.length === 0) return;
+
+    setAllNodes((previous) => {
+      const withoutCurrentReference = previous.filter(
+        (node: any) => getNodeReferenceId(node) !== refId,
+      );
+
+      return [...withoutCurrentReference, ...(rows as ReferenceNode[])];
+    });
+  }, [referenceNodesByReferenceEndpoint, refId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
     const loadChannelReferenceLinks = async () => {
       setLoadingChannelReferenceLinks(true);
       try {
         const token = localStorage.getItem("auth_token");
         const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+        // First, find channels linked to the current reference.
+        const byReferenceResponse = await fetch(`/api/channel-references?reference_id=${refId}`, { headers });
+        const byReferencePayload = byReferenceResponse.ok
+          ? await byReferenceResponse.json().catch(() => ({}))
+          : {};
+        const byReferenceRows = Array.isArray((byReferencePayload as any)?.data)
+          ? (byReferencePayload as any).data
+          : Array.isArray(byReferencePayload)
+            ? byReferencePayload
+            : [];
+
+        const referenceChannelId = Number(
+          (byReferenceRows[0] as any)?.channel_id ?? (byReferenceRows[0] as any)?.channelId ?? 0,
+        );
+
+        if (referenceChannelId > 0) {
+          const byChannelResponse = await fetch(`/api/channel-references?channel_id=${referenceChannelId}`, { headers });
+          const byChannelPayload = byChannelResponse.ok
+            ? await byChannelResponse.json().catch(() => ({}))
+            : {};
+          const byChannelRows = Array.isArray((byChannelPayload as any)?.data)
+            ? (byChannelPayload as any).data
+            : Array.isArray(byChannelPayload)
+              ? byChannelPayload
+              : [];
+
+          if (isMounted) {
+            setChannelReferenceLinks(byChannelRows);
+            setFallbackNavigatorReferences([]);
+          }
+
+          // Also hydrate references/nodes from channel detail to avoid empty tree when
+          // reference-nodes endpoints are inconsistent across environments.
+          const withReferencesResponse = await fetch(`/api/channels/${referenceChannelId}/with-references`, { headers });
+          if (withReferencesResponse.ok) {
+            const withReferencesPayload = await withReferencesResponse.json().catch(() => ({}));
+            const withReferencesData = withReferencesPayload?.data ?? withReferencesPayload;
+            const referencesFromChannel = Array.isArray(withReferencesData?.references)
+              ? withReferencesData.references
+              : [];
+            const currentReferenceFromChannel = referencesFromChannel.find(
+              (reference: any) => Number(reference?.id) === refId,
+            );
+            const currentReferenceNodes = Array.isArray(currentReferenceFromChannel?.nodes)
+              ? currentReferenceFromChannel.nodes
+              : [];
+
+            if (isMounted && referencesFromChannel.length > 0) {
+              setFallbackNavigatorReferences(referencesFromChannel);
+            }
+
+            if (isMounted && currentReferenceNodes.length > 0) {
+              setAllNodes((previous) => {
+                const withoutCurrentReference = previous.filter(
+                  (node: any) => getNodeReferenceId(node) !== refId,
+                );
+                return [...withoutCurrentReference, ...currentReferenceNodes];
+              });
+            }
+          }
+
+          return;
+        }
+
+        // Fallback: discover the channel context by loading channel detail with references.
+        const channelRows = Array.isArray(channels) ? channels : [];
+        for (const channel of channelRows as any[]) {
+          const channelId = Number(channel?.id ?? 0);
+          if (!channelId) continue;
+
+          const channelResponse = await fetch(`/api/channels/${channelId}/with-references`, { headers });
+          if (!channelResponse.ok) continue;
+
+          const channelPayload = await channelResponse.json().catch(() => ({}));
+          const channelData = channelPayload?.data ?? channelPayload;
+          const referencesFromChannel = Array.isArray(channelData?.references)
+            ? channelData.references
+            : [];
+
+          const hasCurrentReference = referencesFromChannel.some(
+            (reference: any) => Number(reference?.id) === refId,
+          );
+
+          if (!hasCurrentReference) continue;
+
+          const syntheticLinks = referencesFromChannel
+            .map((reference: any) => {
+              const referenceId = Number(reference?.id ?? 0);
+              if (!referenceId) return null;
+
+              return {
+                channel_id: channelId,
+                reference_id: referenceId,
+              };
+            })
+            .filter(Boolean);
+
+          const matchedReference = referencesFromChannel.find(
+            (reference: any) => Number(reference?.id) === refId,
+          );
+          const matchedNodes = Array.isArray(matchedReference?.nodes)
+            ? matchedReference.nodes
+            : [];
+
+          if (isMounted) {
+            setChannelReferenceLinks(syntheticLinks as any[]);
+            setFallbackNavigatorReferences(referencesFromChannel);
+
+            if (matchedNodes.length > 0) {
+              setAllNodes((previous) => {
+                const withoutCurrentReference = previous.filter(
+                  (node: any) => getNodeReferenceId(node) !== refId,
+                );
+                return [...withoutCurrentReference, ...matchedNodes];
+              });
+            }
+          }
+
+          return;
+        }
+
+        // Fallback for environments that do not filter correctly by reference_id.
         const response = await fetch("/api/channel-references", { headers });
         if (!response.ok) throw new Error("Failed to load channel references");
 
@@ -245,10 +724,12 @@ export default function ReferenceDetail() {
 
         if (isMounted) {
           setChannelReferenceLinks(rows);
+          setFallbackNavigatorReferences([]);
         }
       } catch {
         if (isMounted) {
           setChannelReferenceLinks([]);
+          setFallbackNavigatorReferences([]);
         }
       } finally {
         if (isMounted) {
@@ -262,7 +743,44 @@ export default function ReferenceDetail() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [refId, channels]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadReferenceById = async () => {
+      if (!refId || Number.isNaN(refId)) {
+        if (isMounted) setFallbackReferenceById(null);
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem("auth_token");
+        const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+        const response = await fetch(`/api/references/${refId}`, { headers });
+        if (!response.ok) {
+          if (isMounted) setFallbackReferenceById(null);
+          return;
+        }
+
+        const payload = await response.json().catch(() => ({}));
+        const row = payload?.data ?? payload;
+        if (isMounted) {
+          setFallbackReferenceById(row && Number(row?.id ?? 0) > 0 ? row : null);
+        }
+      } catch {
+        if (isMounted) {
+          setFallbackReferenceById(null);
+        }
+      }
+    };
+
+    loadReferenceById();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [refId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -311,11 +829,22 @@ export default function ReferenceDetail() {
 
   useEffect(() => {
     setSelectedNodeId(initialNodeIdFromQuery);
-    setIsActiveReferenceExpanded(true);
+    setExpandedReferenceIds((previous) => ({
+      ...previous,
+      [refId]: true,
+    }));
+    setExpandedNodeIds({});
     setInlineNoteDraft("");
     setIsCreatingNoteCard(false);
     setEditingNodeId(null);
   }, [refId, initialNodeIdFromQuery]);
+  const toggleReferenceExpand = (referenceId: number) => {
+    setExpandedReferenceIds((previous) => ({
+      ...previous,
+      [referenceId]: !(previous[referenceId] ?? true),
+    }));
+  };
+
 
   useEffect(() => {
     setInlineNoteDraft("");
@@ -335,6 +864,9 @@ export default function ReferenceDetail() {
       if (noteAutosaveTimeoutRef.current) {
         window.clearTimeout(noteAutosaveTimeoutRef.current);
       }
+      if (saveIndicatorTimeoutRef.current) {
+        window.clearTimeout(saveIndicatorTimeoutRef.current);
+      }
       if (readingSwipeUnlockTimerRef.current) {
         window.clearTimeout(readingSwipeUnlockTimerRef.current);
       }
@@ -349,30 +881,70 @@ export default function ReferenceDetail() {
     }
 
     if (nodeContentEditorRef.current) {
-      nodeContentEditorRef.current.textContent = nodeEditDraft;
+      const formatted = renderFormattedContent(nodeEditDraft);
+      if (nodeContentEditorRef.current.innerHTML !== formatted) {
+        nodeContentEditorRef.current.innerHTML = formatted;
+      }
     }
-  }, [editingNodeId, selectedNodeId]);
+
+    window.requestAnimationFrame(() => {
+      const targetElement = editingNodeFocusField === "content"
+        ? (nodeContentEditorRef.current ?? nodeLabelEditorRef.current)
+        : (nodeLabelEditorRef.current ?? nodeContentEditorRef.current);
+
+      const clickPoint = pendingNodeEditorClickPointRef.current;
+      if (clickPoint && focusEditableAtPoint(targetElement, clickPoint.x, clickPoint.y)) {
+        pendingNodeEditorClickPointRef.current = null;
+        return;
+      }
+
+      pendingNodeEditorClickPointRef.current = null;
+      focusEditableAtStart(targetElement);
+    });
+  }, [editingNodeId, selectedNodeId, editingNodeFocusField]);
 
   useEffect(() => {
     if (!editingNoteId || !noteEditorRef.current) return;
-    noteEditorRef.current.textContent = noteEditDraft;
+    const formatted = renderFormattedContent(noteEditDraft);
+    if (noteEditorRef.current.innerHTML !== formatted) {
+      noteEditorRef.current.innerHTML = formatted;
+    }
   }, [editingNoteId]);
 
   useEffect(() => {
     if (!isCreatingNoteCard || !newNoteEditorRef.current) return;
-    newNoteEditorRef.current.textContent = inlineNoteDraft;
+    const formatted = renderFormattedContent(inlineNoteDraft);
+    if (newNoteEditorRef.current.innerHTML !== formatted) {
+      newNoteEditorRef.current.innerHTML = formatted;
+    }
   }, [isCreatingNoteCard]);
 
   const currentReference = useMemo(() => {
-    if ((reference as any)?.title) return reference as any;
-    return (references ?? []).find((row: any) => Number(row.id) === refId) ?? null;
-  }, [reference, references, refId]);
+    const referencePayload = reference as any;
+
+    if (referencePayload?.title) {
+      return referencePayload;
+    }
+
+    if (referencePayload?.data?.title) {
+      return referencePayload.data;
+    }
+
+    const listMatch = (references ?? []).find((row: any) => Number(row.id) === refId) ?? null;
+    if (listMatch) return listMatch;
+
+    if (fallbackReferenceById?.title) {
+      return fallbackReferenceById;
+    }
+
+    return null;
+  }, [reference, references, refId, fallbackReferenceById]);
 
   const nodesByReferenceId = useMemo(() => {
     const grouped = new Map<number, ReferenceNode[]>();
 
     allNodes.forEach((node: any) => {
-      const referenceId = Number(node.referenceId ?? node.reference_id ?? 0);
+      const referenceId = getNodeReferenceId(node);
       if (!referenceId) return;
 
       const current = grouped.get(referenceId) ?? [];
@@ -469,22 +1041,87 @@ export default function ReferenceDetail() {
 
   const navigatorReferences = useMemo(() => {
     const referenceRows = references ?? [];
+    const resolvedCurrentTitle = String(currentReference?.title || fallbackReferenceById?.title || "").trim();
+    const currentNodeTitle = getReferenceTitleFromNodes(nodesByReferenceId.get(refId) ?? []);
+    const resolvedCurrentTitleWithFallback = resolvedCurrentTitle || currentNodeTitle;
+    const getResolvedTitleForReference = (rowId: number, row?: any) => {
+      const listTitle = String(
+        referenceRows.find((referenceRow: any) => Number(referenceRow?.id ?? 0) === rowId)?.title || "",
+      ).trim();
+      const rowTitle = String(row?.title || "").trim();
+      const nodeTitle = getReferenceTitleFromNodes(nodesByReferenceId.get(rowId) ?? []);
+
+      return (
+        (rowId === refId ? resolvedCurrentTitleWithFallback : "") ||
+        listTitle ||
+        rowTitle ||
+        nodeTitle ||
+        (rowId > 0 ? `Referência ${rowId}` : "")
+      );
+    };
+    const ensureCurrentReferencePresent = (rows: any[]) => {
+      if (!refId || Number.isNaN(refId)) return rows;
+
+      const hasCurrentReference = rows.some((row: any) => Number(row?.id ?? 0) === refId);
+      if (hasCurrentReference) return rows;
+
+      return [
+        ...rows,
+        {
+          ...(currentReference || fallbackReferenceById || {}),
+          id: refId,
+          title: getResolvedTitleForReference(refId, currentReference || fallbackReferenceById),
+        },
+      ];
+    };
+    const sortReferences = (rows: any[]) => rows.sort((a: any, b: any) => {
+      const orderDiff = getReferenceSortOrder(a) - getReferenceSortOrder(b);
+      if (orderDiff !== 0) return orderDiff;
+      return String(a?.title || "").localeCompare(String(b?.title || ""));
+    });
+
+    if (fallbackNavigatorReferences.length > 0) {
+      const mappedRows = [...fallbackNavigatorReferences]
+        .map((row: any) => {
+          const rowId = Number(row?.id ?? 0);
+          return {
+            ...row,
+            title: getResolvedTitleForReference(rowId, row),
+          };
+        });
+
+      return sortReferences(ensureCurrentReferencePresent(mappedRows));
+    }
+
+    const resolvedTitle = resolvedCurrentTitleWithFallback;
 
     if (!currentChannelId || channelReferenceIds.size === 0) {
-      return currentReference ? [currentReference] : [];
+      if (currentReference) return [currentReference];
+
+      if (refId > 0) {
+        return [{ id: refId, title: resolvedTitle || `Referência ${refId}` }];
+      }
+
+      return [];
     }
 
     const rows = referenceRows
       .filter((row: any) => channelReferenceIds.has(Number(row.id)))
-      .sort((a: any, b: any) => {
-        const orderDiff = getReferenceSortOrder(a) - getReferenceSortOrder(b);
-        if (orderDiff !== 0) return orderDiff;
-        return String(a?.title || "").localeCompare(String(b?.title || ""));
-      });
+      .map((row: any) => ({
+        ...row,
+        title: getResolvedTitleForReference(Number(row?.id ?? 0), row),
+      }));
 
-    if (rows.length > 0) return rows;
-    return currentReference ? [currentReference] : [];
-  }, [references, currentChannelId, channelReferenceIds, currentReference]);
+    if (rows.length > 0) return sortReferences(ensureCurrentReferencePresent(rows));
+
+    if (currentReference) return [currentReference];
+
+    if (refId > 0) {
+      return [{ id: refId, title: resolvedTitle || `Referência ${refId}` }];
+    }
+
+    return [];
+  }, [references, currentChannelId, channelReferenceIds, currentReference, fallbackNavigatorReferences, fallbackReferenceById, refId, nodesByReferenceId]);
 
   const currentReferenceIndex = useMemo(
     () => navigatorReferences.findIndex((row: any) => Number(row.id) === refId),
@@ -525,7 +1162,26 @@ export default function ReferenceDetail() {
     if (currentReadingNodeIndex < 0 || currentReadingNodeIndex >= readingNodes.length - 1) return null;
     return readingNodes[currentReadingNodeIndex + 1]?.node ?? null;
   }, [readingNodes, currentReadingNodeIndex]);
-  
+
+  const handleToggleNodeExpand = (nodeId: number) => {
+    setExpandedNodeIds((previous) => ({
+      ...previous,
+      [nodeId]: !(previous[nodeId] ?? true),
+    }));
+  };
+
+  const handleSelectNode = (nodeId: number, sourceNodes: ReferenceNode[]) => {
+    const ancestorIds = getNodeAncestorIds(sourceNodes, nodeId);
+    setExpandedNodeIds((previous) => {
+      const next = { ...previous };
+      ancestorIds.forEach((ancestorId) => {
+        next[ancestorId] = true;
+      });
+      return next;
+    });
+    setSelectedNodeId(nodeId);
+  };
+
   // Fetch notes for the selected node
   const { data: notes, isLoading: loadingNotes } = useListNotes(
     selectedNodeId ? { referenceNodeId: selectedNodeId } : undefined,
@@ -545,7 +1201,14 @@ export default function ReferenceDetail() {
   });
 
   const selectedNode = nodes?.find(n => n.id === selectedNodeId);
-  const loadingNodes = loadingAllNodes || loadingReferences || loadingChannels || loadingChannelReferenceLinks;
+  const hasMinimumStructureContext = Boolean(currentReference) || nodes.length > 0 || navigatorReferences.length > 0;
+  const loadingNodes = !hasMinimumStructureContext && (
+    loadingRef ||
+    loadingAllNodes ||
+    loadingCurrentReferenceNodes ||
+    loadingReferenceNodesByReferenceEndpoint ||
+    loadingReferences
+  );
 
   const readingNodeNoteStats = useMemo(() => {
     const stats = new Map<number, { count: number; recent: boolean }>();
@@ -604,6 +1267,14 @@ export default function ReferenceDetail() {
 
   const getNoteAuthorId = (note: any) => Number(note?.user?.id ?? note?.userId ?? note?.user_id ?? 0);
 
+  const getValidatedNoteVisibility = (note: any): "PRIVATE" | "PUBLIC" | "CHANNEL" | undefined => {
+    const value = String(note?.visibility || "").toUpperCase();
+    if (value === "PRIVATE" || value === "PUBLIC" || value === "CHANNEL") {
+      return value;
+    }
+    return undefined;
+  };
+
   const startEditingNote = (note: any) => {
     if (!canEditNote(note)) return;
 
@@ -619,18 +1290,56 @@ export default function ReferenceDetail() {
     const noteId = Number(note?.id ?? 0);
     if (!noteId || !canEditNote(note) || savingNoteEdit) return;
 
-    const content = String(contentOverride ?? noteEditDraft ?? "");
+    const liveEditorContent = editingNoteId === noteId ? String(noteEditorRef.current?.innerHTML || "") : "";
+    const content = String(contentOverride ?? (liveEditorContent || noteEditDraft || ""));
+    const originalContent = String(note?.content || "");
+    const didContentChange =
+      normalizeRichContentForCompare(content) !== normalizeRichContentForCompare(originalContent);
+    const visibility = getValidatedNoteVisibility(note);
+    const resolvedChannelId = Number(note?.channelId ?? note?.channel_id ?? currentChannelId ?? 0) || undefined;
+    const resolvedReferenceNodeId = Number(
+      note?.referenceNodeId ??
+      note?.reference_node_id ??
+      note?.referenceNode?.id ??
+      selectedNodeId ??
+      0,
+    ) || undefined;
+    const fallbackVisibility: "PRIVATE" | "PUBLIC" | "CHANNEL" = resolvedChannelId ? "CHANNEL" : "PRIVATE";
+    const resolvedVisibility = visibility ?? fallbackVisibility;
+
+    const payload: any = {
+      content,
+      visibility: resolvedVisibility,
+      ...(resolvedReferenceNodeId ? { reference_node_id: resolvedReferenceNodeId } : {}),
+      ...(resolvedVisibility === "CHANNEL" ? { channel_id: resolvedChannelId ?? null } : {}),
+    };
+
+    if (!didContentChange) {
+      if (closeEditor) {
+        setEditingNoteId(null);
+      }
+      setEditSaveState("saved");
+      return;
+    }
 
     setSavingNoteEdit(true);
+    setEditSaveState("saving");
     try {
-      await updateNoteMutation.mutateAsync({
-        id: noteId,
-        data: {
-          content,
-          visibility: note?.visibility,
-          channelId: Number(note?.channelId ?? note?.channel_id ?? currentChannelId ?? 0) || undefined,
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(`/api/notes/${noteId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        body: JSON.stringify(payload),
       });
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        const message = String(errorPayload?.message || errorPayload?.error || "Não foi possível salvar a nota");
+        throw new Error(message);
+      }
 
       queryClient.invalidateQueries({ queryKey: getListNotesQueryKey() });
       if (selectedNodeId) {
@@ -640,12 +1349,18 @@ export default function ReferenceDetail() {
       if (closeEditor) {
         setEditingNoteId(null);
       }
+      setEditSaveState("saved");
+    } catch (error: any) {
+      setEditSaveState("error");
+      toast({ title: error?.message || "Erro ao salvar nota", variant: "destructive" });
     } finally {
       setSavingNoteEdit(false);
     }
   };
 
   const scheduleNoteAutosave = (note: any, draft: string) => {
+    setEditSaveState("saving");
+
     if (noteAutosaveTimeoutRef.current) {
       window.clearTimeout(noteAutosaveTimeoutRef.current);
     }
@@ -653,6 +1368,16 @@ export default function ReferenceDetail() {
     noteAutosaveTimeoutRef.current = window.setTimeout(() => {
       saveNoteEdit(note, draft, false);
     }, 500);
+  };
+
+  const handleNoteBlurSave = (note: any) => {
+    if (noteAutosaveTimeoutRef.current) {
+      window.clearTimeout(noteAutosaveTimeoutRef.current);
+      noteAutosaveTimeoutRef.current = null;
+    }
+
+    const draftFromEditor = String(noteEditorRef.current?.innerHTML || noteEditDraft || "");
+    saveNoteEdit(note, draftFromEditor, true);
   };
 
   const createInlineNote = async () => {
@@ -666,6 +1391,7 @@ export default function ReferenceDetail() {
     }
 
     setSavingNoteInline(true);
+    setEditSaveState("saving");
     try {
       const token = localStorage.getItem("auth_token");
       const response = await fetch("/api/notes", {
@@ -693,8 +1419,10 @@ export default function ReferenceDetail() {
       if (targetNodeId > 0) {
         queryClient.invalidateQueries({ queryKey: getListNotesQueryKey({ referenceNodeId: targetNodeId }) });
       }
+      setEditSaveState("saved");
       toast({ title: "Nota criada" });
     } catch (error: any) {
+      setEditSaveState("error");
       toast({ title: error?.message || "Erro ao criar nota", variant: "destructive" });
     } finally {
       setSavingNoteInline(false);
@@ -712,22 +1440,31 @@ export default function ReferenceDetail() {
     setSelectedNoteCardId(-1);
   };
 
-  const startEditingNode = (targetNode?: any) => {
+  const startEditingNode = (
+    targetNode?: any,
+    focusField: "label" | "content" = "label",
+    clickPoint?: { x: number; y: number },
+  ) => {
     const node = targetNode ?? selectedNode;
     if (!node) return;
     if (!canEditNode) return;
+    pendingNodeEditorClickPointRef.current = clickPoint ?? null;
     setEditingNodeId(Number(node.id));
     setEditingNodeSnapshot(node);
+    setEditingNodeFocusField(focusField);
     setNodeLabelDraft(String(node.label || ""));
     setNodeEditDraft(String(node.content || ""));
   };
 
-  const saveNodeEdit = async (
+  const saveNodeEditInternal = async (
+    targetNodeInput: any,
+    targetNodeIdInput: number,
     overrides?: { content?: string; label?: string },
     closeEditor = true,
   ) => {
-    const targetNode = editingNodeSnapshot ?? selectedNode;
-    if (!targetNode || !editingNodeId || !canEditNode) return;
+    const targetNode = targetNodeInput;
+    const targetNodeId = Number(targetNodeIdInput || 0);
+    if (!targetNode || !targetNodeId || !canEditNode) return;
     if (savingNodeEdit) return;
 
     const nextLabel = String(overrides?.label ?? nodeLabelDraft ?? targetNode.label ?? "");
@@ -743,9 +1480,10 @@ export default function ReferenceDetail() {
     };
 
     setSavingNodeEdit(true);
+    setEditSaveState("saving");
     try {
       const token = localStorage.getItem("auth_token");
-      let response = await fetch(`/api/reference-nodes/${editingNodeId}`, {
+      let response = await fetch(`/api/reference-nodes/${targetNodeId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -755,7 +1493,7 @@ export default function ReferenceDetail() {
       });
 
       if (response.status === 404) {
-        response = await fetch(`/api/references/${refId}/nodes/${editingNodeId}`, {
+        response = await fetch(`/api/references/${refId}/nodes/${targetNodeId}`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
@@ -768,7 +1506,7 @@ export default function ReferenceDetail() {
       if (!response.ok) throw new Error("Não foi possível editar o node");
 
       setAllNodes((prev) => prev.map((row: any) => {
-        if (Number(row.id) !== Number(editingNodeId)) return row;
+        if (Number(row.id) !== Number(targetNodeId)) return row;
         return {
           ...row,
           label: payload.label,
@@ -779,20 +1517,281 @@ export default function ReferenceDetail() {
         setEditingNodeId(null);
         setEditingNodeSnapshot(null);
       }
+      setEditSaveState("saved");
+    } catch {
+      setEditSaveState("error");
     } finally {
       setSavingNodeEdit(false);
     }
   };
 
+  const saveNodeEdit = async (
+    overrides?: { content?: string; label?: string },
+    closeEditor = true,
+  ) => {
+    const targetNode = editingNodeSnapshot ?? selectedNode;
+    const targetNodeId = Number(editingNodeId ?? targetNode?.id ?? 0);
+    await saveNodeEditInternal(targetNode, targetNodeId, overrides, closeEditor);
+  };
+
+  const handleNodeBlurSave = (field: "label" | "content") => {
+    if (nodeAutosaveTimeoutRef.current) {
+      window.clearTimeout(nodeAutosaveTimeoutRef.current);
+      nodeAutosaveTimeoutRef.current = null;
+    }
+
+    const liveLabel = String((nodeLabelEditorRef.current?.textContent ?? nodeLabelDraft) || "").replace(/\u00a0/g, " ");
+    const liveContent = String(nodeContentEditorRef.current?.innerHTML || nodeEditDraft || "");
+
+    saveNodeEdit(
+      field === "label"
+        ? { label: liveLabel }
+        : { content: liveContent },
+      true,
+    );
+  };
+
   const scheduleNodeAutosave = (draft: { content?: string; label?: string }) => {
+    setEditSaveState("saving");
+
+    const capturedNode = editingNodeSnapshot ?? selectedNode;
+    const capturedNodeId = Number(editingNodeId ?? capturedNode?.id ?? 0);
+
     if (nodeAutosaveTimeoutRef.current) {
       window.clearTimeout(nodeAutosaveTimeoutRef.current);
     }
 
     nodeAutosaveTimeoutRef.current = window.setTimeout(() => {
-      saveNodeEdit(draft, false);
+      if (!capturedNode || !capturedNodeId || !canEditNode || savingNodeEdit) return;
+      saveNodeEditInternal(capturedNode, capturedNodeId, draft, false);
     }, 500);
   };
+
+  const executeFormattingCommand = (format: NodeFormat) => {
+    if (format === "bold") {
+      document.execCommand("bold");
+    } else if (format === "italic") {
+      document.execCommand("italic");
+    } else if (format === "underline") {
+      document.execCommand("underline");
+    } else if (format === "quote") {
+      wrapCurrentSelection(
+        `<blockquote class=\"${blockquoteClassName}\">`,
+        "</blockquote>",
+        "Citação",
+      );
+    } else if (format === "ordered-list") {
+      insertListFromSelection("ordered");
+    } else if (format === "dash-list") {
+      insertListFromSelection("dash");
+    } else if (format === "bullet-list") {
+      insertListFromSelection("bullet");
+    } else {
+      document.execCommand("insertHTML", false, `<hr class=\"${breakClassName}\" />`);
+    }
+  };
+
+  const applyFormattingToEditable = (
+    element: HTMLDivElement | null,
+    format: NodeFormat,
+    onUpdate: (nextContent: string) => void,
+  ) => {
+    if (!element) {
+      return;
+    }
+
+    element.focus();
+    executeFormattingCommand(format);
+    onUpdate(element.innerHTML);
+  };
+
+  const formatEditingNodeContent = (format: NodeFormat) => {
+    applyFormattingToEditable(nodeContentEditorRef.current, format, (nextContent) => {
+      setNodeEditDraft(nextContent);
+      scheduleNodeAutosave({ content: nextContent });
+    });
+  };
+
+  const formatEditingNoteContent = (note: any, format: NodeFormat) => {
+    applyFormattingToEditable(noteEditorRef.current, format, (nextContent) => {
+      setNoteEditDraft(nextContent);
+      scheduleNoteAutosave(note, nextContent);
+    });
+  };
+
+  const formatNewNoteContent = (format: NodeFormat) => {
+    applyFormattingToEditable(newNoteEditorRef.current, format, (nextContent) => {
+      setInlineNoteDraft(nextContent);
+    });
+  };
+
+  const highlightEditingNodeContent = (color: HighlightColor) => {
+    const input = nodeContentEditorRef.current;
+    if (!input) return;
+
+    input.focus();
+    applyHighlightToSelection(color);
+    const nextContent = input.innerHTML;
+    setNodeEditDraft(nextContent);
+    scheduleNodeAutosave({ content: nextContent });
+  };
+
+  const highlightEditingNoteContent = (note: any, color: HighlightColor) => {
+    const input = noteEditorRef.current;
+    if (!input) return;
+
+    input.focus();
+    applyHighlightToSelection(color);
+    const nextContent = input.innerHTML;
+    setNoteEditDraft(nextContent);
+    scheduleNoteAutosave(note, nextContent);
+  };
+
+  const highlightNewNoteContent = (color: HighlightColor) => {
+    const input = newNoteEditorRef.current;
+    if (!input) return;
+
+    input.focus();
+    applyHighlightToSelection(color);
+    setInlineNoteDraft(input.innerHTML);
+  };
+
+  const renderFormattingToolbar = (
+    onFormat: (format: NodeFormat) => void,
+    onHighlight: (color: HighlightColor) => void,
+  ) => (
+    <div className="mb-3 flex items-center gap-1.5">
+      <button
+        type="button"
+        className="h-7 w-7 rounded-md border border-border/50 bg-transparent text-muted-foreground hover:bg-secondary/40 inline-flex items-center justify-center"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => onFormat("bold")}
+        title="Negrito"
+        aria-label="Negrito"
+      >
+        <Bold className="w-3.5 h-3.5" />
+      </button>
+      <button
+        type="button"
+        className="h-7 w-7 rounded-md border border-border/50 bg-transparent text-muted-foreground hover:bg-secondary/40 inline-flex items-center justify-center"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => onFormat("italic")}
+        title="Italico"
+        aria-label="Italico"
+      >
+        <Italic className="w-3.5 h-3.5" />
+      </button>
+      <button
+        type="button"
+        className="h-7 w-7 rounded-md border border-border/50 bg-transparent text-muted-foreground hover:bg-secondary/40 inline-flex items-center justify-center"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => onFormat("underline")}
+        title="Sublinhado"
+        aria-label="Sublinhado"
+      >
+        <Underline className="w-3.5 h-3.5" />
+      </button>
+      <button
+        type="button"
+        className="h-7 w-7 rounded-md border border-border/50 bg-transparent text-muted-foreground hover:bg-secondary/40 inline-flex items-center justify-center"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => onFormat("quote")}
+        title="Citacao"
+        aria-label="Citacao"
+      >
+        <MessageSquareQuote className="w-3.5 h-3.5" />
+      </button>
+      <button
+        type="button"
+        className="h-7 w-7 rounded-md border border-border/50 bg-transparent text-muted-foreground hover:bg-secondary/40 inline-flex items-center justify-center"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => onFormat("ordered-list")}
+        title="Lista numerada"
+        aria-label="Lista numerada"
+      >
+        <ListOrdered className="w-3.5 h-3.5" />
+      </button>
+      <button
+        type="button"
+        className="h-7 w-7 rounded-md border border-border/50 bg-transparent text-muted-foreground hover:bg-secondary/40 inline-flex items-center justify-center"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => onFormat("dash-list")}
+        title="Lista com traco"
+        aria-label="Lista com traco"
+      >
+        <Minus className="w-3.5 h-3.5" />
+      </button>
+      <button
+        type="button"
+        className="h-7 w-7 rounded-md border border-border/50 bg-transparent text-muted-foreground hover:bg-secondary/40 inline-flex items-center justify-center"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => onFormat("bullet-list")}
+        title="Lista com bolinha"
+        aria-label="Lista com bolinha"
+      >
+        <List className="w-3.5 h-3.5" />
+      </button>
+      <button
+        type="button"
+        className="h-7 w-7 rounded-md border border-border/50 bg-transparent text-muted-foreground hover:bg-secondary/40 inline-flex items-center justify-center"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => onFormat("break")}
+        title="Linha divisoria"
+        aria-label="Linha divisoria"
+      >
+        <span className="flex w-4 items-center justify-center">
+          <span className="block h-px w-4 bg-current" />
+        </span>
+      </button>
+      <span className="mx-1 h-5 w-px bg-border/60" aria-hidden="true" />
+      {(["yellow", "green", "blue", "pink"] as HighlightColor[]).map((color) => (
+        <button
+          key={color}
+          type="button"
+          className="h-7 w-7 rounded-md border border-border/50 bg-transparent inline-flex items-center justify-center hover:bg-secondary/40"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => onHighlight(color)}
+          title={`Highlight ${color}`}
+          aria-label={`Highlight ${color}`}
+        >
+          <span
+            className="h-3.5 w-3.5 rounded-sm border border-black/10"
+            style={{ backgroundColor: highlightColorMap[color] }}
+          />
+        </button>
+      ))}
+    </div>
+  );
+
+  const renderNodeFormattingToolbar = () => renderFormattingToolbar(formatEditingNodeContent, highlightEditingNodeContent);
+
+  useEffect(() => {
+    if (editSaveState !== "saved") {
+      return;
+    }
+
+    if (saveIndicatorTimeoutRef.current) {
+      window.clearTimeout(saveIndicatorTimeoutRef.current);
+    }
+
+    saveIndicatorTimeoutRef.current = window.setTimeout(() => {
+      setEditSaveState("idle");
+    }, 1800);
+
+    return () => {
+      if (saveIndicatorTimeoutRef.current) {
+        window.clearTimeout(saveIndicatorTimeoutRef.current);
+      }
+    };
+  }, [editSaveState]);
+
+  const saveLabel = editSaveState === "saving"
+    ? "Salvando..."
+    : editSaveState === "saved"
+      ? "Salvo"
+      : editSaveState === "error"
+        ? "Erro ao salvar"
+        : "Sem alterações";
 
   const handleDeleteNote = async (noteId: number) => {
     if (!noteId) return;
@@ -818,7 +1817,7 @@ export default function ReferenceDetail() {
 
   const goToReadingNode = (targetNode: any | null) => {
     if (!targetNode) return;
-    setSelectedNodeId(Number(targetNode.id));
+    handleSelectNode(Number(targetNode.id), nodes);
   };
 
   const activePreviousTarget = isReadingView
@@ -883,6 +1882,51 @@ export default function ReferenceDetail() {
   return (
     <AppLayout>
       <div className="flex flex-col md:flex-row h-full md:h-[calc(100vh-theme(spacing.16))] lg:h-[calc(100vh)]">
+        <style>{`
+          .${blockquoteClassName} {
+            border-left: 4px solid #111111;
+            padding-left: 1rem;
+            margin: 0.75rem 0;
+            color: inherit;
+          }
+
+          .${bulletListClassName} {
+            list-style-type: disc;
+            padding-left: 1.5rem;
+            margin: 0.75rem 0;
+          }
+
+          .${dashListClassName} {
+            list-style: none;
+            padding-left: 0;
+            margin: 0.75rem 0;
+          }
+
+          .${dashListClassName} li {
+            position: relative;
+            padding-left: 1.25rem;
+            margin: 0.25rem 0;
+          }
+
+          .${dashListClassName} li::before {
+            content: "-";
+            position: absolute;
+            left: 0;
+            color: #111111;
+          }
+
+          ol {
+            list-style-type: decimal;
+            padding-left: 1.5rem;
+            margin: 0.75rem 0;
+          }
+
+          .${breakClassName} {
+            border: 0;
+            border-top: 1px solid rgba(15, 23, 42, 0.18);
+            margin: 1rem 0;
+          }
+        `}</style>
         
         {/* Left Pane: Hierarchy Tree */}
         <div className="w-full md:w-80 lg:w-96 border-r border-border/50 bg-sidebar/50 flex flex-col h-[50vh] md:h-full overflow-hidden">
@@ -916,7 +1960,7 @@ export default function ReferenceDetail() {
                         </Link>
                       ) : (
                         <p className="truncate font-display text-base font-semibold text-foreground">
-                          {currentChannelName || "Referência"}
+                          {currentChannelName || String(currentReference?.title || fallbackReferenceById?.title || "").trim() || "Referência"}
                         </p>
                       )}
                     </div>
@@ -930,7 +1974,7 @@ export default function ReferenceDetail() {
                         .sort((a, b) => getNodePosition(a) - getNodePosition(b));
                       const relatedRootNodes = getReferenceVisibleRootNodes(row.title, relatedNodes);
                       const isActiveReference = relatedReferenceId === refId;
-                      const showReferenceNodes = isActiveReference && isActiveReferenceExpanded;
+                      const showReferenceNodes = isActiveReference && (expandedReferenceIds[relatedReferenceId] ?? true);
 
                       return (
                         <div
@@ -940,12 +1984,11 @@ export default function ReferenceDetail() {
                           <div
                             className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-secondary/40 transition-colors cursor-pointer"
                             onClick={() => {
-                              if (isActiveReference) {
-                                if (isReadingView) {
-                                  setSelectedNodeId(null);
-                                }
-                                return;
-                              }
+                              setSelectedNodeId(null);
+                              setExpandedReferenceIds((previous) => ({
+                                ...previous,
+                                [relatedReferenceId]: true,
+                              }));
                               setLocation(`/references/${relatedReferenceId}${isReadingView ? "?view=reading" : ""}`);
                             }}
                           >
@@ -955,7 +1998,7 @@ export default function ReferenceDetail() {
                               onClick={(event) => {
                                 event.stopPropagation();
                                 if (!isActiveReference || relatedRootNodes.length === 0) return;
-                                setIsActiveReferenceExpanded((prev) => !prev);
+                                toggleReferenceExpand(relatedReferenceId);
                               }}
                               aria-label={showReferenceNodes ? "Fechar referência" : "Abrir referência"}
                             >
@@ -963,7 +2006,9 @@ export default function ReferenceDetail() {
                             </button>
                             <div className="min-w-0">
                               <p className={`truncate text-sm font-semibold ${isActiveReference ? "text-primary" : "text-foreground"}`}>
-                                {row.title}
+                                {isActiveReference
+                                  ? (String(currentReference?.title || fallbackReferenceById?.title || "").trim() || row.title)
+                                  : row.title}
                               </p>
                             </div>
                           </div>
@@ -977,8 +2022,9 @@ export default function ReferenceDetail() {
                                   nodes={relatedNodes}
                                   level={1}
                                   selectedNodeId={selectedNodeId}
-                                  onSelect={setSelectedNodeId}
-                                  expandAll
+                                  expandedNodeIds={expandedNodeIds}
+                                  onSelect={(nodeId) => handleSelectNode(nodeId, relatedNodes)}
+                                  onToggleExpand={handleToggleNodeExpand}
                                 />
                               ))}
                             </div>
@@ -996,6 +2042,10 @@ export default function ReferenceDetail() {
 
         {/* Right Pane: Content & Notes */}
         <div className="relative flex-1 flex flex-col h-auto md:h-full overflow-hidden bg-background">
+          <div className="pointer-events-none absolute right-4 top-4 z-30 flex items-center gap-2 rounded-full border border-border/60 bg-card/95 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur">
+            {editSaveState === "saving" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            <span className={editSaveState === "error" ? "text-rose-600" : undefined}>{saveLabel}</span>
+          </div>
           {isReadingView && (activePreviousTarget || activeNextTarget) && (
             <div className="pointer-events-none absolute inset-0 z-20 hidden md:block">
               {activePreviousTarget ? (
@@ -1052,28 +2102,28 @@ export default function ReferenceDetail() {
                       return (
                         <div
                           key={node.id}
-                          className="rounded-2xl border border-border/60 bg-card p-4 md:p-5 shadow-sm cursor-pointer hover:border-primary/30 transition-colors"
-                          style={{ marginLeft: `${level * 8}px` }}
+                          className="group py-3 md:py-4 cursor-pointer"
+                          style={{ marginLeft: `${level * 10}px` }}
                           onClick={() => {
                             if (isEditingThisReadingNode) return;
-                            setSelectedNodeId(Number(node.id));
+                            handleSelectNode(Number(node.id), nodes);
                           }}
                         >
-                          <div className="flex items-start justify-between gap-3 mb-3">
+                          <div className="flex items-start justify-between gap-3 mb-2">
                             <div className="min-w-0">
-                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/80">{type || "NODE"}</p>
+                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover:opacity-100">{type || "NODE"}</p>
                               {isEditingThisReadingNode ? (
                                 <h2
                                   contentEditable
                                   suppressContentEditableWarning
-                                  className="text-xl md:text-2xl font-display font-semibold text-foreground/95 mt-1 outline-none"
+                                  className={`text-xl md:text-2xl font-display font-semibold text-foreground/95 mt-1 ${nodeEditorFocusClass}`}
                                   onClick={(event) => event.stopPropagation()}
                                   onInput={(e) => {
                                     const draft = (e.currentTarget.textContent ?? "").replace(/\u00a0/g, " ");
                                     setNodeLabelDraft(draft);
                                     scheduleNodeAutosave({ label: draft });
                                   }}
-                                  onBlur={() => saveNodeEdit(undefined, true)}
+                                  onBlur={() => handleNodeBlurSave("label")}
                                   onKeyDown={(e) => {
                                     if (e.key === "Escape") {
                                       e.preventDefault();
@@ -1092,7 +2142,7 @@ export default function ReferenceDetail() {
                                   onClick={(event) => {
                                     if (!canEditNode) return;
                                     event.stopPropagation();
-                                    startEditingNode(node);
+                                    startEditingNode(node, "label", { x: event.clientX, y: event.clientY });
                                   }}
                                 >
                                   {label || "Sem título"}
@@ -1101,7 +2151,7 @@ export default function ReferenceDetail() {
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               {hasNotes && (
-                                <span className="inline-flex items-center gap-1 rounded-md border border-border/60 px-1.5 py-1 text-[10px] text-muted-foreground">
+                                <span className="inline-flex items-center gap-1 rounded-md border border-border/40 px-1.5 py-1 text-[10px] text-muted-foreground opacity-70 group-hover:opacity-100 transition-opacity">
                                   {noteStats?.recent ? (
                                     <span className="relative inline-flex shrink-0">
                                       <MessageCircle className="w-3.5 h-3.5 text-rose-500" />
@@ -1113,44 +2163,57 @@ export default function ReferenceDetail() {
                                   <span>{noteStats?.count ?? 0}</span>
                                 </span>
                               )}
-                              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                              <ChevronRight className="w-4 h-4 text-muted-foreground/70 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </div>
                           </div>
                           {isEditingThisReadingNode ? (
-                            <div
-                              contentEditable
-                              suppressContentEditableWarning
-                              className="font-serif text-xl leading-loose text-foreground whitespace-pre-wrap outline-none"
-                              onClick={(event) => event.stopPropagation()}
-                              onInput={(e) => {
-                                const draft = (e.currentTarget.textContent ?? "").replace(/\u00a0/g, " ");
-                                setNodeEditDraft(draft);
-                                scheduleNodeAutosave({ content: draft });
-                              }}
-                              onBlur={() => saveNodeEdit(undefined, true)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Escape") {
-                                  e.preventDefault();
-                                  if (nodeAutosaveTimeoutRef.current) {
-                                    window.clearTimeout(nodeAutosaveTimeoutRef.current);
+                            <>
+                              {renderNodeFormattingToolbar()}
+                              <div
+                                contentEditable
+                                suppressContentEditableWarning
+                                className={`prose prose-stone dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-blockquote:my-2 max-w-none font-serif text-xl leading-loose text-foreground whitespace-pre-wrap ${nodeEditorFocusClass}`}
+                                onClick={(event) => event.stopPropagation()}
+                                onPaste={(event) => {
+                                  event.preventDefault();
+                                  const plainText = event.clipboardData.getData("text/plain");
+                                  document.execCommand("insertText", false, plainText);
+                                  const activeInput = nodeContentEditorRef.current;
+                                  if (activeInput) {
+                                    const draft = activeInput.innerHTML;
+                                    setNodeEditDraft(draft);
+                                    scheduleNodeAutosave({ content: draft });
                                   }
-                                  setEditingNodeId(null);
-                                  setEditingNodeSnapshot(null);
-                                }
-                              }}
-                              ref={nodeContentEditorRef}
-                            />
+                                }}
+                                onInput={(e) => {
+                                  const draft = e.currentTarget.innerHTML;
+                                  setNodeEditDraft(draft);
+                                  scheduleNodeAutosave({ content: draft });
+                                }}
+                                onBlur={() => handleNodeBlurSave("content")}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Escape") {
+                                    e.preventDefault();
+                                    if (nodeAutosaveTimeoutRef.current) {
+                                      window.clearTimeout(nodeAutosaveTimeoutRef.current);
+                                    }
+                                    setEditingNodeId(null);
+                                    setEditingNodeSnapshot(null);
+                                  }
+                                }}
+                                ref={nodeContentEditorRef}
+                              />
+                            </>
                           ) : content ? (
                             <div
-                              className={`font-serif text-xl leading-loose text-foreground whitespace-pre-wrap ${canEditNode ? "cursor-text" : ""}`}
+                              className={`prose prose-stone dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-blockquote:my-2 max-w-none font-serif text-xl leading-loose text-foreground ${canEditNode ? "cursor-text" : ""}`}
                               onClick={(event) => {
                                 if (!canEditNode) return;
                                 event.stopPropagation();
-                                startEditingNode(node);
+                                startEditingNode(node, "content", { x: event.clientX, y: event.clientY });
                               }}
-                            >
-                              {content}
-                            </div>
+                              dangerouslySetInnerHTML={{ __html: renderFormattedContent(content) }}
+                            />
                           ) : (
                             <p
                               className={`text-muted-foreground italic font-serif ${canEditNode ? "cursor-text" : ""}`}
@@ -1186,13 +2249,13 @@ export default function ReferenceDetail() {
                       <h2
                         contentEditable
                         suppressContentEditableWarning
-                        className="text-3xl font-display font-bold outline-none"
+                        className={`text-3xl font-display font-bold ${nodeEditorFocusClass}`}
                         onInput={(e) => {
                           const draft = (e.currentTarget.textContent ?? "").replace(/\u00a0/g, " ");
                           setNodeLabelDraft(draft);
                           scheduleNodeAutosave({ label: draft });
                         }}
-                        onBlur={() => saveNodeEdit(undefined, true)}
+                        onBlur={() => handleNodeBlurSave("label")}
                         onKeyDown={(e) => {
                           if (e.key === "Escape") {
                             e.preventDefault();
@@ -1208,7 +2271,7 @@ export default function ReferenceDetail() {
                     ) : (
                       <h2
                         className={`text-3xl font-display font-bold ${canEditNode ? "cursor-text" : ""}`}
-                        onClick={startEditingNode}
+                        onClick={(event) => startEditingNode(undefined, "label", { x: event.clientX, y: event.clientY })}
                       >
                         {selectedNode?.label}
                       </h2>
@@ -1219,16 +2282,28 @@ export default function ReferenceDetail() {
                   </div>
                   {editingNodeId === selectedNode?.id ? (
                     <div className="prose prose-stone dark:prose-invert max-w-none font-serif text-lg leading-loose text-foreground/90 whitespace-pre-wrap">
+                      {renderNodeFormattingToolbar()}
                       <div
                         contentEditable
                         suppressContentEditableWarning
-                        className="outline-none"
+                        className={`prose prose-stone dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-blockquote:my-2 max-w-none ${nodeEditorFocusClass}`}
+                        onPaste={(event) => {
+                          event.preventDefault();
+                          const plainText = event.clipboardData.getData("text/plain");
+                          document.execCommand("insertText", false, plainText);
+                          const activeInput = nodeContentEditorRef.current;
+                          if (activeInput) {
+                            const draft = activeInput.innerHTML;
+                            setNodeEditDraft(draft);
+                            scheduleNodeAutosave({ content: draft });
+                          }
+                        }}
                         onInput={(e) => {
-                          const draft = (e.currentTarget.textContent ?? "").replace(/\u00a0/g, " ");
+                          const draft = e.currentTarget.innerHTML;
                           setNodeEditDraft(draft);
                           scheduleNodeAutosave({ content: draft });
                         }}
-                        onBlur={() => saveNodeEdit(undefined, true)}
+                        onBlur={() => handleNodeBlurSave("content")}
                         onKeyDown={(e) => {
                           if (e.key === "Escape") {
                             e.preventDefault();
@@ -1243,26 +2318,25 @@ export default function ReferenceDetail() {
                       />
                     </div>
                   ) : selectedNode?.content ? (
-                    <div className="prose prose-stone dark:prose-invert max-w-none font-serif text-lg leading-loose text-foreground/90 whitespace-pre-wrap">
+                    <div className="prose prose-stone dark:prose-invert max-w-none font-serif text-lg leading-loose text-foreground/90">
                       <div
                         className={canEditNode ? "cursor-text" : ""}
-                        onClick={startEditingNode}
+                        onClick={(event) => startEditingNode(undefined, "content", { x: event.clientX, y: event.clientY })}
                         role={canEditNode ? "button" : undefined}
                         tabIndex={canEditNode ? 0 : -1}
                         onKeyDown={(e) => {
                           if (canEditNode && (e.key === "Enter" || e.key === " ")) {
                             e.preventDefault();
-                            startEditingNode();
+                            startEditingNode(undefined, "content");
                           }
                         }}
-                      >
-                        {selectedNode.content}
-                      </div>
+                        dangerouslySetInnerHTML={{ __html: renderFormattedContent(String(selectedNode.content || "")) }}
+                      />
                     </div>
                   ) : (
                     <p
                       className={`text-muted-foreground italic font-serif ${canEditNode ? "cursor-text" : ""}`}
-                      onClick={startEditingNode}
+                      onClick={(event) => startEditingNode(undefined, "content", { x: event.clientX, y: event.clientY })}
                     >
                       Nenhum conteúdo de texto disponível para esta seção.
                     </p>
@@ -1291,12 +2365,22 @@ export default function ReferenceDetail() {
                         className={`rounded-2xl border bg-card p-8 shadow-sm transition-colors mb-4 ${selectedNoteCardId === -1 ? "border-primary/40" : "border-border"}`}
                         onClick={() => setSelectedNoteCardId(-1)}
                       >
+                        {renderFormattingToolbar(formatNewNoteContent, highlightNewNoteContent)}
                         <div className="flex items-start justify-between gap-3">
                           <div
                             contentEditable
                             suppressContentEditableWarning
-                            className="w-full font-serif text-xl leading-loose text-foreground whitespace-pre-wrap outline-none"
-                            onInput={(e) => setInlineNoteDraft((e.currentTarget.textContent ?? "").replace(/\u00a0/g, " "))}
+                            className="prose prose-stone dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-blockquote:my-2 w-full max-w-none font-serif text-xl leading-loose text-foreground outline-none"
+                            onPaste={(event) => {
+                              event.preventDefault();
+                              const plainText = event.clipboardData.getData("text/plain");
+                              document.execCommand("insertText", false, plainText);
+                              const activeInput = newNoteEditorRef.current;
+                              if (activeInput) {
+                                setInlineNoteDraft(activeInput.innerHTML);
+                              }
+                            }}
+                            onInput={(e) => setInlineNoteDraft(e.currentTarget.innerHTML)}
                             ref={newNoteEditorRef}
                           />
 
@@ -1363,37 +2447,53 @@ export default function ReferenceDetail() {
                             <div className="flex items-start justify-between gap-3">
                               <div className="w-full">
                                 {isEditingThisNote ? (
-                                  <div
-                                    contentEditable
-                                    suppressContentEditableWarning
-                                    className="font-serif text-xl leading-loose text-foreground whitespace-pre-wrap outline-none"
-                                    onInput={(e) => {
-                                      const draft = (e.currentTarget.textContent ?? "").replace(/\u00a0/g, " ");
-                                      setNoteEditDraft(draft);
-                                      scheduleNoteAutosave(note, draft);
-                                    }}
-                                    onBlur={() => saveNoteEdit(note, undefined, true)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Escape") {
-                                        e.preventDefault();
-                                        if (noteAutosaveTimeoutRef.current) {
-                                          window.clearTimeout(noteAutosaveTimeoutRef.current);
+                                  <>
+                                    {renderFormattingToolbar(
+                                      (format) => formatEditingNoteContent(note, format),
+                                      (color) => highlightEditingNoteContent(note, color),
+                                    )}
+                                    <div
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      className="prose prose-stone dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-blockquote:my-2 max-w-none font-serif text-xl leading-loose text-foreground outline-none"
+                                      onPaste={(event) => {
+                                        event.preventDefault();
+                                        const plainText = event.clipboardData.getData("text/plain");
+                                        document.execCommand("insertText", false, plainText);
+                                        const activeInput = noteEditorRef.current;
+                                        if (activeInput) {
+                                          const draft = activeInput.innerHTML;
+                                          setNoteEditDraft(draft);
+                                          scheduleNoteAutosave(note, draft);
                                         }
-                                        setEditingNoteId(null);
-                                      }
-                                    }}
-                                    ref={noteEditorRef}
-                                  />
+                                      }}
+                                      onInput={(e) => {
+                                        const draft = e.currentTarget.innerHTML;
+                                        setNoteEditDraft(draft);
+                                        scheduleNoteAutosave(note, draft);
+                                      }}
+                                      onBlur={() => handleNoteBlurSave(note)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Escape") {
+                                          e.preventDefault();
+                                          if (noteAutosaveTimeoutRef.current) {
+                                            window.clearTimeout(noteAutosaveTimeoutRef.current);
+                                          }
+                                          setEditingNoteId(null);
+                                        }
+                                      }}
+                                      ref={noteEditorRef}
+                                    />
+                                  </>
                                 ) : (
                                   <div
-                                    className={`font-serif text-xl leading-loose text-foreground whitespace-pre-wrap ${canEditNote(note) ? "cursor-text" : ""}`}
+                                    className={`prose prose-stone dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-blockquote:my-2 max-w-none font-serif text-xl leading-loose text-foreground ${canEditNote(note) ? "cursor-text" : ""}`}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       startEditingNote(note);
                                     }}
-                                  >
-                                    {note.content}
-                                  </div>
+                                    dangerouslySetInnerHTML={{ __html: renderFormattedContent(String(note.content || "")) }}
+                                  />
                                 )}
                               </div>
 

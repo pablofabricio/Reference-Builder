@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Bold, ChevronDown, ChevronRight, Italic, List, Loader2, MessageSquareQuote, Plus, Trash2, Underline } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useSearch } from "wouter";
 
 type DraftBlock = {
   id: string;
@@ -200,6 +201,7 @@ function TreeNode({ node, blocks, selectedId, onSelect, expandedById, onToggleEx
 
 export default function ReferenceCreate() {
   const { toast } = useToast();
+  const search = useSearch();
 
   const createReferenceNodeMutation = useCreateReferenceNode();
   const addChannelReferenceMutation = useAddChannelReference();
@@ -226,6 +228,15 @@ export default function ReferenceCreate() {
   const autosaveTimerRef = useRef<number | null>(null);
   const saveAllRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
   const saveInFlightRef = useRef(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const initialChannelId = String(params.get("channelId") || "").trim();
+
+    if (!initialChannelId) return;
+
+    setLinkedChannelId(initialChannelId);
+  }, [search]);
 
   const rootBlocks = useMemo(
     () => blocks.filter((block) => block.parentId == null).sort((left, right) => left.position - right.position),

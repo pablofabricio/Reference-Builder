@@ -66,6 +66,9 @@ export default function ChannelDetail() {
   const [editChannelForm, setEditChannelForm] = useState({ id: 0, name: "", description: "", visibility: "PRIVATE" });
   const [isCreating, setIsCreating] = useState(false);
   const [isDeletingChannel, setIsDeletingChannel] = useState(false);
+  const [fallbackChannelReferences, setFallbackChannelReferences] = useState<any[] | null>(null);
+  const [fallbackChannelReferenceLinks, setFallbackChannelReferenceLinks] = useState<any[] | null>(null);
+  const [loadingFallbackChannelReferences, setLoadingFallbackChannelReferences] = useState(false);
 
   const { data: channels, isLoading: loadingChannel } = useListChannels();
   const { data: channelReferenceLinks, isLoading: loadingChannelReferences } = useListChannelReferences(channelId);
@@ -219,6 +222,83 @@ export default function ChannelDetail() {
 
   useEffect(() => {
     let isMounted = true;
+
+    if (!channelId) {
+      setFallbackChannelReferences(null);
+      setFallbackChannelReferenceLinks(null);
+      return;
+    }
+
+    const loadFallbackChannelReferences = async () => {
+      setLoadingFallbackChannelReferences(true);
+      try {
+        const token = localStorage.getItem("auth_token");
+        const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+        // Backend api-reference exposes this endpoint with nested references.
+        const withReferencesResponse = await fetch(`/api/channels/${channelId}/with-references`, {
+          headers,
+        });
+
+        if (withReferencesResponse.ok) {
+          const payload = await withReferencesResponse.json().catch(() => ({}));
+          const channelPayload = payload?.data ?? payload;
+          const refs = Array.isArray(channelPayload?.references)
+            ? channelPayload.references
+            : [];
+
+          if (isMounted && refs.length > 0) {
+            setFallbackChannelReferences(refs);
+            setFallbackChannelReferenceLinks(null);
+            return;
+          }
+        }
+
+        // Fallback for installations that expose only channel-references link table.
+        const linksResponse = await fetch(`/api/channel-references?channel_id=${channelId}`, {
+          headers,
+        });
+
+        if (!linksResponse.ok) {
+          if (isMounted) {
+            setFallbackChannelReferences([]);
+            setFallbackChannelReferenceLinks([]);
+          }
+          return;
+        }
+
+        const linkPayload = await linksResponse.json().catch(() => ({}));
+        const links = Array.isArray(linkPayload?.data)
+          ? linkPayload.data
+          : Array.isArray(linkPayload)
+            ? linkPayload
+            : [];
+
+        if (isMounted) {
+          setFallbackChannelReferences([]);
+          setFallbackChannelReferenceLinks(links);
+        }
+      } catch {
+        if (isMounted) {
+          setFallbackChannelReferences([]);
+          setFallbackChannelReferenceLinks([]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingFallbackChannelReferences(false);
+        }
+      }
+    };
+
+    loadFallbackChannelReferences();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [channelId]);
+
+  useEffect(() => {
+    let isMounted = true;
     if (!user?.id) return;
 
     const loadPendingRequests = async () => {
@@ -270,17 +350,40 @@ export default function ChannelDetail() {
   }, [channelId, user?.id]);
 
   const references = useMemo(() => {
+    if (Array.isArray(fallbackChannelReferences) && fallbackChannelReferences.length > 0) {
+      return fallbackChannelReferences;
+    }
+
+    const normalizedLinks = Array.isArray(channelReferenceLinks)
+      ? channelReferenceLinks
+      : Array.isArray((channelReferenceLinks as any)?.data)
+        ? (channelReferenceLinks as any).data
+        : Array.isArray(fallbackChannelReferenceLinks)
+          ? fallbackChannelReferenceLinks
+          : [];
+
+    if (normalizedLinks.length === 0) return [];
+
+    const directReferences = normalizedLinks
+      .filter((row: any) => {
+        const refId = Number(row.id);
+        return !Number.isNaN(refId) && refId > 0 && typeof row.title === "string";
+      });
+
+    if (directReferences.length > 0) {
+      return directReferences;
+    }
+
     if (!allReferences) return [];
 
     const ids = new Set(
-      (channelReferenceLinks ?? [])
-        .filter((row: any) => Number(row.channelId ?? row.channel_id) === channelId)
+      normalizedLinks
         .map((row: any) => Number(row.referenceId ?? row.reference_id))
-        .filter((value: number) => !Number.isNaN(value)),
+        .filter((value: number) => !Number.isNaN(value) && value > 0),
     );
 
     return allReferences.filter((ref: any) => ids.has(Number(ref.id)));
-  }, [allReferences, channelReferenceLinks, channelId]);
+  }, [allReferences, channelReferenceLinks, fallbackChannelReferences, fallbackChannelReferenceLinks]);
 
   const filteredReferences = references
     .filter((ref: any) => {
@@ -1132,7 +1235,7 @@ export default function ChannelDetail() {
     });
   };
 
-  if (loadingChannel || loadingChannelReferences || loadingReferences) {
+  if (loadingChannel || loadingChannelReferences || loadingReferences || loadingFallbackChannelReferences) {
     return (
       <AppLayout>
         <div className="flex justify-center items-center h-full"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
@@ -1292,7 +1395,7 @@ export default function ChannelDetail() {
                 <button
                   type="button"
                   className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                  onClick={() => setShowCreateDialog(true)}
+                  onClick={() => setLocation(`/references/new?channelId=${channelId}`)}
                 >
                   <Plus className="w-4 h-4" />
                   Criar referência

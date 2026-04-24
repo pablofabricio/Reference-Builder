@@ -10,6 +10,78 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 
 type UserSummary = { name: string; avatarUrl?: string };
 
+const blockquoteClassName = "reference-blockquote";
+const bulletListClassName = "reference-list-bullet";
+const dashListClassName = "reference-list-dash";
+const breakClassName = "reference-break";
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const sanitizeHtml = (raw: string) =>
+  raw
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
+    .replace(/\son\w+=\"[^\"]*\"/gi, "")
+    .replace(/\son\w+=\'[^\']*\'/gi, "")
+    .replace(/javascript:/gi, "");
+
+const renderInlineFormatting = (raw: string) => {
+  const escaped = escapeHtml(raw);
+  return escaped
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>")
+    .replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/g, "<u>$1</u>");
+};
+
+const renderFormattedContent = (raw: string) => {
+  if (/<\/?[a-z][\s\S]*>/i.test(raw)) {
+    return sanitizeHtml(raw);
+  }
+
+  const lines = raw.split("\n");
+  const chunks: string[] = [];
+  let listBuffer: string[] = [];
+
+  const flushList = () => {
+    if (listBuffer.length === 0) return;
+    chunks.push(`<ul>${listBuffer.join("")}</ul>`);
+    listBuffer = [];
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("- ")) {
+      listBuffer.push(`<li>${renderInlineFormatting(trimmed.slice(2))}</li>`);
+      return;
+    }
+
+    flushList();
+
+    if (!trimmed) {
+      chunks.push("<p><br /></p>");
+      return;
+    }
+
+    if (trimmed.startsWith("> ")) {
+      chunks.push(`<blockquote class=\"${blockquoteClassName}\">${renderInlineFormatting(trimmed.slice(2))}</blockquote>`);
+      return;
+    }
+
+    chunks.push(`<p>${renderInlineFormatting(line)}</p>`);
+  });
+
+  flushList();
+
+  return chunks.join("");
+};
+
 export default function Home() {
   const { user } = useAuth();
   const { data: channelNotes, isLoading: loadingChannelNotes } = useListNotes({ visibility: "CHANNEL" });
@@ -318,6 +390,51 @@ export default function Home() {
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto p-6 md:p-10">
+        <style>{`
+          .${blockquoteClassName} {
+            border-left: 4px solid #111111;
+            padding-left: 1rem;
+            margin: 0.75rem 0;
+            color: inherit;
+          }
+
+          .${bulletListClassName} {
+            list-style-type: disc;
+            padding-left: 1.5rem;
+            margin: 0.75rem 0;
+          }
+
+          .${dashListClassName} {
+            list-style: none;
+            padding-left: 0;
+            margin: 0.75rem 0;
+          }
+
+          .${dashListClassName} li {
+            position: relative;
+            padding-left: 1.25rem;
+            margin: 0.25rem 0;
+          }
+
+          .${dashListClassName} li::before {
+            content: "-";
+            position: absolute;
+            left: 0;
+            color: #111111;
+          }
+
+          ol {
+            list-style-type: decimal;
+            padding-left: 1.5rem;
+            margin: 0.75rem 0;
+          }
+
+          .${breakClassName} {
+            border: 0;
+            border-top: 1px solid rgba(15, 23, 42, 0.18);
+            margin: 1rem 0;
+          }
+        `}</style>
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -410,15 +527,17 @@ export default function Home() {
                   <CardContent>
                     {referenceContent ? (
                       <Link href={resolvedReferenceHref}>
-                        <p className="font-serif text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap mb-3 hover:text-foreground transition-colors cursor-pointer">
-                          {referenceContent}
-                        </p>
+                        <div
+                          className="prose prose-stone dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-blockquote:my-2 mb-3 max-w-none font-serif text-sm text-muted-foreground leading-relaxed hover:text-foreground transition-colors cursor-pointer"
+                          dangerouslySetInnerHTML={{ __html: renderFormattedContent(referenceContent) }}
+                        />
                       </Link>
                     ) : null}
                     <Link href={resolvedReferenceHref}>
-                      <p className="font-serif text-foreground leading-relaxed whitespace-pre-wrap text-lg hover:text-primary transition-colors cursor-pointer">
-                        {note.content}
-                      </p>
+                      <div
+                        className="prose prose-stone dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-blockquote:my-2 max-w-none font-serif text-lg text-foreground leading-relaxed hover:text-primary transition-colors cursor-pointer"
+                        dangerouslySetInnerHTML={{ __html: renderFormattedContent(String(note.content || "")) }}
+                      />
                     </Link>
                   </CardContent>
                 </Card>

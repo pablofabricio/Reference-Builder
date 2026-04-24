@@ -39,3 +39,9 @@ O app principal sobe em `http://localhost:5173`.
 - `pnpm dev:mockup`: roda o mockup sandbox
 - `pnpm build:app`: build do app principal
 - `pnpm typecheck`: valida tipos
+
+## Spec driven (fonte de contexto)
+
+Para manter contexto funcional e tecnico da aplicacao sempre atualizado, use:
+
+- `docs/spec-driven-reference-app.md`
